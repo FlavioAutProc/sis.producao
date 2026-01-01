@@ -187,6 +187,7 @@ class SistemaProducao {
         });
         
         // Relatórios - Gerar
+        // CORREÇÃO: Configurar o evento do botão Gerar Relatório
         document.getElementById('generate-report').addEventListener('click', () => {
             this.gerarRelatorio();
         });
@@ -408,12 +409,24 @@ class SistemaProducao {
         document.getElementById('clear-form').style.display = 'flex';
     }
     
-    mostrarBotoesEdicao() {
-        document.getElementById('submit-weighing').style.display = 'none';
-        document.getElementById('save-edit').style.display = 'flex';
-        document.getElementById('cancel-edit').style.display = 'flex';
-        document.getElementById('clear-form').style.display = 'none';
+   mostrarBotoesEdicao() {
+    document.getElementById('submit-weighing').style.display = 'none';
+    document.getElementById('save-edit').style.display = 'flex';
+    document.getElementById('cancel-edit').style.display = 'flex';
+    document.getElementById('clear-form').style.display = 'none';
+    
+    // Adicionar status visual de edição
+    const selectedProduct = document.getElementById('selected-product');
+    if (selectedProduct.querySelector('.product-selected-info')) {
+        const productInfo = selectedProduct.querySelector('.product-info');
+        if (!productInfo.querySelector('.editing-status')) {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'editing-status';
+            statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> MODO EDIÇÃO - As alterações serão salvas no registro original';
+            productInfo.appendChild(statusDiv);
+        }
     }
+}
     
     registrarPesagemNormal() {
         if (!this.produtoSelecionado) {
@@ -470,52 +483,60 @@ class SistemaProducao {
     
     // CORREÇÃO: Salvar edição de registro (atualiza sem duplicar)
     salvarEdicao() {
-        if (!this.produtoSelecionado || !this.editandoRegistroId) {
-            this.mostrarNotificacao('Nenhum registro em edição', 'error');
-            return;
-        }
-        
-        const tara = parseFloat(document.getElementById('tara').value);
-        const bruto = parseFloat(document.getElementById('bruto').value);
-        const valorKg = parseFloat(document.getElementById('valor-kg').value);
-        const { liquido, valorTotal } = this.calcularPesoLiquido();
-        
-        if (liquido <= 0) {
-            this.mostrarNotificacao('O peso líquido deve ser maior que zero', 'error');
-            return;
-        }
-        
-        // Encontrar e atualizar o registro existente
-        const index = this.registros.findIndex(r => r.id === this.editandoRegistroId);
-        if (index !== -1) {
-            // CORREÇÃO: Manter os dados originais exceto os editados
-            this.registros[index] = {
-                ...this.registros[index], // Mantém todos os dados originais
-                produto: this.produtoSelecionado.PRODUTO,
-                codigo: this.produtoSelecionado.CÓDIGO,
-                tara: tara,
-                bruto: bruto,
-                liquido: liquido,
-                valorKg: valorKg,
-                valorTotal: valorTotal,
-                dataEditado: new Date().toISOString() // Adiciona data da edição
-            };
-            
-            this.salvarRegistros();
-            
-            this.mostrarNotificacao(
-                `Registro atualizado: ${liquido.toFixed(3)} kg de ${this.produtoSelecionado.PRODUTO}`,
-                'success'
-            );
-            
-            this.limparFormularioPesagem();
-            this.atualizarDashboard();
-            
-            if (document.querySelector('#records.tab-content.active')) {
-                this.aplicarFiltros();
-            }
-        }
+    if (!this.produtoSelecionado || !this.editandoRegistroId) {
+        this.mostrarNotificacao('Nenhum registro em edição', 'error');
+        return;
     }
+    
+    const tara = parseFloat(document.getElementById('tara').value);
+    const bruto = parseFloat(document.getElementById('bruto').value);
+    const valorKg = parseFloat(document.getElementById('valor-kg').value);
+    const { liquido, valorTotal } = this.calcularPesoLiquido();
+    
+    if (liquido <= 0) {
+        this.mostrarNotificacao('O peso líquido deve ser maior que zero', 'error');
+        return;
+    }
+    
+    // Encontrar e atualizar o registro existente - SEM DUPLICAR
+    const index = this.registros.findIndex(r => r.id === this.editandoRegistroId);
+    if (index !== -1) {
+        // CORREÇÃO CRÍTICA: Atualizar APENAS o registro existente
+        const registroOriginal = this.registros[index];
+        
+        this.registros[index] = {
+            ...registroOriginal, // Mantém todos os dados originais
+            produto: this.produtoSelecionado.PRODUTO,
+            codigo: this.produtoSelecionado.CÓDIGO,
+            tara: tara,
+            bruto: bruto,
+            liquido: liquido,
+            valorKg: valorKg,
+            valorTotal: valorTotal,
+            dataEditado: new Date().toISOString() // Marca como editado
+        };
+        
+        this.salvarRegistros();
+        
+        this.mostrarNotificacao(
+            `Registro atualizado: ${liquido.toFixed(3)} kg de ${this.produtoSelecionado.PRODUTO}`,
+            'success'
+        );
+        
+        // Limpar e atualizar interfaces
+        this.limparFormularioPesagem();
+        this.atualizarDashboard();
+        
+        if (document.querySelector('#records.tab-content.active')) {
+            this.aplicarFiltros();
+        }
+        
+        // Resetar ID de edição
+        this.editandoRegistroId = null;
+    } else {
+        this.mostrarNotificacao('Registro não encontrado para edição', 'error');
+    }
+}
     
     cancelarEdicao() {
         this.limparFormularioPesagem();
@@ -892,116 +913,148 @@ class SistemaProducao {
     }
     
     exibirRegistros(registros) {
-        const tbody = document.getElementById('records-body');
+    const tbody = document.getElementById('records-body');
+    
+    if (registros.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="empty-table">
+                    <i class="fas fa-clipboard-list"></i>
+                    Nenhum registro encontrado
+                </td>
+            </tr>
+        `;
         
-        if (registros.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="empty-table">
-                        <i class="fas fa-clipboard-list"></i>
-                        Nenhum registro encontrado
-                    </td>
-                </tr>
-            `;
-            
-            // Resetar totais
-            document.getElementById('total-peso').textContent = '0 kg';
-            document.getElementById('total-valor').textContent = 'R$ 0,00';
-            document.getElementById('total-diff').textContent = '0 kg';
-            document.getElementById('total-prejuizo').textContent = 'R$ 0,00';
-            
-            return;
-        }
+        // Resetar totais
+        document.getElementById('total-peso').textContent = '0 kg';
+        document.getElementById('total-valor').textContent = 'R$ 0,00';
+        document.getElementById('total-diff').textContent = '0 kg';
+        document.getElementById('total-prejuizo').textContent = 'R$ 0,00';
         
-        let totalPeso = 0;
-        let totalValor = 0;
-        let totalDiff = 0;
-        let totalPrejuizo = 0;
-        
-        tbody.innerHTML = registros.map(registro => {
-            // Calcular valores para exibição
-            let pesoExibir = 0;
-            let valorExibir = 0;
-            let diffExibir = 0;
-            let prejuizoExibir = 0;
-            let detalhes = '';
-            
-            if (registro.tipo === 'normal') {
-                pesoExibir = registro.liquido;
-                valorExibir = registro.valorTotal;
-                detalhes = `Tara: ${registro.tara.toFixed(3)}kg | Bruto: ${registro.bruto.toFixed(3)}kg`;
-            } else {
-                pesoExibir = registro.pesoInicial;
-                valorExibir = registro.valorInicial;
-                diffExibir = registro.diferencaPeso;
-                prejuizoExibir = registro.prejuizo;
-                
-                if (registro.tipo === 'sobra') {
-                    detalhes = `Transformação para ${registro.destino === 'farinha' ? 'Farinha de Rosca' : 'Torrada'}`;
-                } else {
-                    detalhes = 'Perda/Descarte';
-                }
-            }
-            
-            // Acumular totais
-            totalPeso += pesoExibir;
-            totalValor += valorExibir;
-            totalDiff += diffExibir;
-            totalPrejuizo += prejuizoExibir;
-            
-            // Criar badge de tipo
-            let tipoBadge = '';
-            if (registro.tipo === 'normal') {
-                tipoBadge = '<span class="type-badge normal">Normal</span>';
-            } else if (registro.tipo === 'sobra') {
-                tipoBadge = '<span class="type-badge sobra">Sobra</span>';
-            } else {
-                tipoBadge = '<span class="type-badge perda">Perda</span>';
-            }
-            
-            // CORREÇÃO: Incluir observações se existirem
-            const observacoesExibir = registro.observacoes ? `<br><small>${registro.observacoes}</small>` : '';
-            
-            return `
-                <tr>
-                    <td>${moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm')}</td>
-                    <td>${tipoBadge}</td>
-                    <td>${registro.produto}<br><small>Código: ${registro.codigo}</small>${observacoesExibir}</td>
-                    <td>${detalhes}</td>
-                    <td>${pesoExibir.toFixed(3)} kg</td>
-                    <td>${valorExibir.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td>${registro.tipo !== 'normal' ? diffExibir.toFixed(3) + ' kg' : '-'}</td>
-                    <td>${prejuizoExibir > 0 ? prejuizoExibir.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}</td>
-                    <td class="actions">
-                        <button class="btn-action btn-edit" title="Editar" onclick="sistema.editarRegistro(${registro.id})">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn-action btn-delete-row" title="Excluir" onclick="sistema.confirmarExcluirRegistro(${registro.id})">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-        
-        // Atualizar totais
-        document.getElementById('total-peso').textContent = totalPeso.toFixed(3) + ' kg';
-        document.getElementById('total-valor').textContent = 
-            totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        document.getElementById('total-diff').textContent = totalDiff.toFixed(3) + ' kg';
-        document.getElementById('total-prejuizo').textContent = 
-            totalPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        return;
     }
     
-    confirmarExcluirRegistro(id) {
-        const registro = this.registros.find(r => r.id === id);
-        if (!registro) return;
+    let totalPeso = 0;
+    let totalValor = 0;
+    let totalDiff = 0;
+    let totalPrejuizo = 0;
+    
+    tbody.innerHTML = registros.map(registro => {
+        // Calcular valores para exibição
+        let pesoExibir = 0;
+        let valorExibir = 0;
+        let diffExibir = 0;
+        let prejuizoExibir = 0;
+        let detalhes = '';
         
-        this.mostrarModal(
-            `Tem certeza que deseja excluir o registro de ${registro.produto}?`,
-            () => this.excluirRegistro(id)
-        );
+        if (registro.tipo === 'normal') {
+            pesoExibir = registro.liquido || 0;
+            valorExibir = registro.valorTotal || 0;
+            detalhes = `Tara: ${(registro.tara || 0).toFixed(3)}kg | Bruto: ${(registro.bruto || 0).toFixed(3)}kg`;
+        } else {
+            pesoExibir = registro.pesoInicial || 0;
+            valorExibir = registro.valorInicial || 0;
+            diffExibir = registro.diferencaPeso || 0;
+            prejuizoExibir = registro.prejuizo || 0;
+            
+            if (registro.tipo === 'sobra') {
+                detalhes = `Transformação para ${registro.destino === 'farinha' ? 'Farinha de Rosca' : 'Torrada Simples'}`;
+            } else {
+                detalhes = 'Perda/Descarte';
+            }
+        }
+        
+        // Acumular totais
+        totalPeso += pesoExibir;
+        totalValor += valorExibir;
+        totalDiff += diffExibir;
+        totalPrejuizo += prejuizoExibir;
+        
+        // Criar badge de tipo
+        let tipoBadge = '';
+        if (registro.tipo === 'normal') {
+            tipoBadge = '<span class="type-badge normal">Normal</span>';
+        } else if (registro.tipo === 'sobra') {
+            tipoBadge = '<span class="type-badge sobra">Sobra</span>';
+        } else {
+            tipoBadge = '<span class="type-badge perda">Perda</span>';
+        }
+        
+        // Adicionar ícone de edição se o registro foi editado
+        const editadoIcon = registro.dataEditado ? 
+            '<i class="fas fa-pencil-alt" style="margin-left: 5px; color: #ff9800; font-size: 10px;" title="Editado"></i>' : '';
+        
+        // Observações se existirem
+        const observacoesExibir = registro.observacoes ? 
+            `<br><small class="observacoes-text">${registro.observacoes}</small>` : '';
+        
+        return `
+            <tr>
+                <td>
+                    ${moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm')}
+                    ${editadoIcon}
+                </td>
+                <td>${tipoBadge}</td>
+                <td>
+                    ${registro.produto}
+                    <br><small>Código: ${registro.codigo}</small>
+                    ${observacoesExibir}
+                </td>
+                <td>${detalhes}</td>
+                <td>${pesoExibir.toFixed(3)} kg</td>
+                <td>${valorExibir.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                <td>${registro.tipo !== 'normal' ? diffExibir.toFixed(3) + ' kg' : '-'}</td>
+                <td>
+                    ${prejuizoExibir > 0 ? 
+                        `<span class="prejuizo-text">${prejuizoExibir.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>` : 
+                        '-'}
+                </td>
+                <td class="actions">
+                    <button class="btn-action btn-edit" title="Editar registro" onclick="sistema.editarRegistro(${registro.id})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-action btn-delete-row" title="Excluir registro" onclick="sistema.confirmarExcluirRegistro(${registro.id})">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    // Atualizar totais
+    document.getElementById('total-peso').textContent = totalPeso.toFixed(3) + ' kg';
+    document.getElementById('total-valor').textContent = 
+        totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('total-diff').textContent = totalDiff.toFixed(3) + ' kg';
+    document.getElementById('total-prejuizo').textContent = 
+        totalPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+    
+    confirmarExcluirRegistro(id) {
+    const registro = this.registros.find(r => r.id === id);
+    if (!registro) {
+        this.mostrarNotificacao('Registro não encontrado', 'error');
+        return;
     }
+    
+    let tipoTexto = '';
+    if (registro.tipo === 'normal') {
+        tipoTexto = 'produção normal';
+    } else if (registro.tipo === 'sobra') {
+        tipoTexto = 'transformação de sobra';
+    } else {
+        tipoTexto = 'perda/descarte';
+    }
+    
+    this.mostrarModal(
+        `<strong>Tem certeza que deseja excluir permanentemente este registro?</strong><br><br>
+         <strong>Produto:</strong> ${registro.produto}<br>
+         <strong>Tipo:</strong> ${tipoTexto}<br>
+         <strong>Data:</strong> ${moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm')}<br><br>
+         <em>Esta ação não pode ser desfeita.</em>`,
+        () => this.excluirRegistro(id)
+    );
+}
     
     excluirRegistro(id) {
         const index = this.registros.findIndex(r => r.id === id);
@@ -1033,61 +1086,77 @@ class SistemaProducao {
     
     // CORREÇÃO: Edição de registros
     editarRegistro(id) {
-        const registro = this.registros.find(r => r.id === id);
-        if (!registro) {
-            this.mostrarNotificacao('Registro não encontrado', 'error');
-            return;
+    const registro = this.registros.find(r => r.id === id);
+    if (!registro) {
+        this.mostrarNotificacao('Registro não encontrado', 'error');
+        return;
+    }
+    
+    if (registro.tipo === 'normal') {
+        this.mostrarAba('weighing');
+        
+        // Limpar formulário primeiro
+        this.limparFormularioPesagem();
+        
+        // Setar modo de edição
+        this.editandoRegistroId = id;
+        this.mostrarBotoesEdicao();
+        
+        // Selecionar o produto
+        const produto = this.produtos.find(p => p.CÓDIGO === registro.codigo);
+        if (produto) {
+            this.produtoSelecionado = produto;
+            const container = document.getElementById('selected-product');
+            container.innerHTML = `
+                <div class="product-selected-info">
+                    <div class="product-info">
+                        <h3>${produto.PRODUTO} (EDITANDO)</h3>
+                        <p><i class="fas fa-pencil-alt"></i> Editando registro existente</p>
+                    </div>
+                    <div class="product-code">Código: ${produto.CÓDIGO}</div>
+                </div>
+            `;
+            container.classList.add('active');
         }
         
-        if (registro.tipo === 'normal') {
-            this.mostrarAba('weighing');
+        // Preencher campos com os dados existentes
+        document.getElementById('tara').value = registro.tara || 0.500;
+        document.getElementById('bruto').value = registro.bruto || 0;
+        document.getElementById('valor-kg').value = registro.valorKg || 25.50;
+        this.calcularPesoLiquido();
+        
+    } else {
+        this.mostrarAba('remanejamento');
+        
+        // Resetar primeiro
+        this.resetarRemanejamento();
+        
+        // Setar modo de edição
+        this.editandoRemanejamentoId = id;
+        document.getElementById('submit-remanejamento').textContent = 'Salvar Edição';
+        
+        // Preencher dados do remanejamento
+        const produto = this.produtos.find(p => p.CÓDIGO === registro.codigo);
+        if (produto) {
+            this.produtoRemanejamento = produto;
+            this.tipoRemanejamento = registro.tipo;
+            this.destinoRemanejamento = registro.destino;
             
-            // Setar modo de edição
-            this.editandoRegistroId = id;
-            this.mostrarBotoesEdicao();
-            
-            // Selecionar o produto
-            const produto = this.produtos.find(p => p.CÓDIGO === registro.codigo);
-            if (produto) {
-                this.produtoSelecionado = produto;
-                const container = document.getElementById('selected-product');
-                container.innerHTML = `
-                    <div class="product-selected-info">
-                        <div class="product-info">
-                            <h3>${produto.PRODUTO} (EDITANDO)</h3>
-                            <p>Editando registro existente</p>
-                        </div>
-                        <div class="product-code">Código: ${produto.CÓDIGO}</div>
+            // Atualizar UI - primeiro mostrar o produto selecionado
+            const container = document.getElementById('remanejamento-selected');
+            container.innerHTML = `
+                <div class="product-selected-info">
+                    <div class="product-info">
+                        <h3>${produto.PRODUTO} (EDITANDO)</h3>
+                        <p><i class="fas fa-pencil-alt"></i> Editando registro de remanejamento</p>
                     </div>
-                `;
-                container.classList.add('active');
-            }
+                    <div class="product-code">Código: ${produto.CÓDIGO}</div>
+                </div>
+            `;
+            container.classList.add('active');
             
-            // Preencher campos
-            document.getElementById('tara').value = registro.tara;
-            document.getElementById('bruto').value = registro.bruto;
-            document.getElementById('valor-kg').value = registro.valorKg;
-            this.calcularPesoLiquido();
-            
-        } else {
-            this.mostrarAba('remanejamento');
-            
-            // Setar modo de edição
-            this.editandoRemanejamentoId = id;
-            document.getElementById('submit-remanejamento').textContent = 'Salvar Edição';
-            
-            // Preencher dados do remanejamento
-            const produto = this.produtos.find(p => p.CÓDIGO === registro.codigo);
-            if (produto) {
-                this.produtoRemanejamento = produto;
-                this.tipoRemanejamento = registro.tipo;
-                this.destinoRemanejamento = registro.destino;
-                
-                // Atualizar UI
-                this.mostrarPasso(3);
-                this.atualizarInfoRemanejamento();
-                
-                // Selecionar tipo correspondente
+            // Selecionar tipo correspondente
+            setTimeout(() => {
                 document.querySelectorAll('.option-card').forEach(card => {
                     const tipo = card.getAttribute('data-tipo');
                     const destino = card.getAttribute('data-destino');
@@ -1099,19 +1168,24 @@ class SistemaProducao {
                     }
                 });
                 
+                // Ir para o passo 3
+                this.mostrarPasso(3);
+                this.atualizarInfoRemanejamento();
+                
                 // Preencher campos
-                document.getElementById('peso-inicial').value = registro.pesoInicial;
-                document.getElementById('peso-final').value = registro.pesoFinal;
-                document.getElementById('valor-origem').value = registro.valorOrigem;
-                document.getElementById('valor-destino').value = registro.valorDestino;
+                document.getElementById('peso-inicial').value = registro.pesoInicial || 0;
+                document.getElementById('peso-final').value = registro.pesoFinal || 0;
+                document.getElementById('valor-origem').value = registro.valorOrigem || 0;
+                document.getElementById('valor-destino').value = registro.valorDestino || 0;
                 document.getElementById('observacoes').value = registro.observacoes || '';
                 
                 this.calcularRemanejamento();
-            }
+            }, 100);
         }
-        
-        this.mostrarNotificacao('Editando registro existente', 'warning');
     }
+    
+    this.mostrarNotificacao('Editando registro existente. As alterações serão salvas no registro original.', 'warning');
+}
     
     atualizarDashboard() {
         const hoje = moment().startOf('day');
@@ -1561,240 +1635,540 @@ class SistemaProducao {
     }
     
     async gerarPDF() {
-        const inicio = document.getElementById('advanced-start').value;
-        const fim = document.getElementById('advanced-end').value;
-        const tipoRelatorio = document.getElementById('filter-tipo-detalhado').value;
-        const nomeProduto = document.getElementById('filter-product-name').value;
-        const codigoProduto = document.getElementById('filter-product-code').value;
+    const inicio = document.getElementById('advanced-start').value;
+    const fim = document.getElementById('advanced-end').value;
+    const tipoRelatorio = document.getElementById('filter-tipo-detalhado').value;
+    const nomeProduto = document.getElementById('filter-product-name').value;
+    const codigoProduto = document.getElementById('filter-product-code').value;
+    
+    if (!inicio || !fim) {
+        this.mostrarNotificacao('Selecione um período válido para gerar o PDF', 'error');
+        return;
+    }
+    
+    // Filtrar registros pelo período
+    let registrosPeriodo = [...this.registros];
+    
+    // Filtrar por período
+    if (inicio && fim) {
+        const dataInicio = moment(inicio).startOf('day');
+        const dataFim = moment(fim).endOf('day');
         
-        if (!inicio || !fim) {
-            this.mostrarNotificacao('Selecione um período válido para gerar o PDF', 'error');
-            return;
-        }
+        registrosPeriodo = registrosPeriodo.filter(registro => {
+            const dataRegistro = moment(registro.data);
+            return dataRegistro.isBetween(dataInicio, dataFim, null, '[]');
+        });
+    }
+    
+    // Aplicar todos os filtros
+    if (tipoRelatorio !== 'all') {
+        registrosPeriodo = registrosPeriodo.filter(registro => registro.tipo === tipoRelatorio);
+    }
+    
+    if (nomeProduto) {
+        registrosPeriodo = registrosPeriodo.filter(registro => 
+            registro.produto.toLowerCase().includes(nomeProduto.toLowerCase())
+        );
+    }
+    
+    if (codigoProduto) {
+        registrosPeriodo = registrosPeriodo.filter(registro => 
+            registro.codigo.toString().includes(codigoProduto)
+        );
+    }
+    
+    if (registrosPeriodo.length === 0) {
+        this.mostrarNotificacao('Nenhum registro encontrado no período para gerar PDF', 'warning');
+        return;
+    }
+    
+    try {
+        // Carregar a biblioteca jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'pt', 'a4');
         
-        // Filtrar registros pelo período
-        let registrosPeriodo = [...this.registros];
+        let yPos = 50;
         
-        // Filtrar por período
-        if (inicio && fim) {
-            const dataInicio = moment(inicio).startOf('day');
-            const dataFim = moment(fim).endOf('day');
+        // Cabeçalho profissional
+        doc.setFontSize(24);
+        doc.setTextColor(30, 30, 30);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RELATÓRIO DE PRODUÇÃO - POR PRODUTO', 40, yPos);
+        yPos += 35;
+        
+        // Linha decorativa
+        doc.setDrawColor(41, 98, 255);
+        doc.setLineWidth(2);
+        doc.line(40, yPos, 555, yPos);
+        yPos += 20;
+        
+        // Informações do período
+        doc.setFontSize(11);
+        doc.setTextColor(100, 100, 100);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Período: ${moment(inicio).locale('pt-br').format('DD/MM/YYYY')} até ${moment(fim).locale('pt-br').format('DD/MM/YYYY')}`, 40, yPos);
+        yPos += 15;
+        doc.text(`Gerado em: ${moment().locale('pt-br').format('DD/MM/YYYY HH:mm')}`, 40, yPos);
+        yPos += 30;
+        
+        // Agrupar registros por produto para resumo individual
+        const produtosAgrupados = {};
+        
+        registrosPeriodo.forEach(registro => {
+            const chave = `${registro.codigo}-${registro.produto}`;
             
-            registrosPeriodo = registrosPeriodo.filter(registro => {
-                const dataRegistro = moment(registro.data);
-                return dataRegistro.isBetween(dataInicio, dataFim, null, '[]');
-            });
-        }
-        
-        // Aplicar todos os filtros
-        if (tipoRelatorio !== 'all') {
-            registrosPeriodo = registrosPeriodo.filter(registro => registro.tipo === tipoRelatorio);
-        }
-        
-        if (nomeProduto) {
-            registrosPeriodo = registrosPeriodo.filter(registro => 
-                registro.produto.toLowerCase().includes(nomeProduto.toLowerCase())
-            );
-        }
-        
-        if (codigoProduto) {
-            registrosPeriodo = registrosPeriodo.filter(registro => 
-                registro.codigo.toString().includes(codigoProduto)
-            );
-        }
-        
-        if (registrosPeriodo.length === 0) {
-            this.mostrarNotificacao('Nenhum registro encontrado no período para gerar PDF', 'warning');
-            return;
-        }
-        
-        try {
-            // Carregar a biblioteca jsPDF
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'pt', 'a4');
+            if (!produtosAgrupados[chave]) {
+                produtosAgrupados[chave] = {
+                    produto: registro.produto,
+                    codigo: registro.codigo,
+                    producaoNormal: [],
+                    producaoSobras: [],
+                    producaoPerdas: [],
+                    totalProducao: 0,
+                    totalProducaoValor: 0,
+                    totalSobras: 0,
+                    totalSobrasPrejuizo: 0,
+                    totalPerdas: 0,
+                    totalPerdasPrejuizo: 0
+                };
+            }
             
-            let yPos = 40;
+            if (registro.tipo === 'normal') {
+                produtosAgrupados[chave].producaoNormal.push(registro);
+                produtosAgrupados[chave].totalProducao += registro.liquido || 0;
+                produtosAgrupados[chave].totalProducaoValor += registro.valorTotal || 0;
+            } else if (registro.tipo === 'sobra') {
+                produtosAgrupados[chave].producaoSobras.push(registro);
+                produtosAgrupados[chave].totalSobras += registro.pesoInicial || 0;
+                produtosAgrupados[chave].totalSobrasPrejuizo += registro.prejuizo || 0;
+            } else if (registro.tipo === 'perda') {
+                produtosAgrupados[chave].producaoPerdas.push(registro);
+                produtosAgrupados[chave].totalPerdas += registro.pesoInicial || 0;
+                produtosAgrupados[chave].totalPerdasPrejuizo += registro.prejuizo || 0;
+            }
+        });
+        
+        // Calcular totais gerais para o relatório
+        const totalGeralProducao = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalProducao, 0);
+        const totalGeralProducaoValor = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalProducaoValor, 0);
+        const totalGeralSobras = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalSobras, 0);
+        const totalGeralPerdas = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalPerdas, 0);
+        const totalGeralPrejuizo = Object.values(produtosAgrupados).reduce((sum, prod) => 
+            sum + prod.totalSobrasPrejuizo + prod.totalPerdasPrejuizo, 0);
+        
+        // RESULTADO GERAL (visão rápida)
+        doc.setFontSize(14);
+        doc.setTextColor(30, 30, 30);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RESULTADO GERAL DO PERÍODO', 40, yPos);
+        yPos += 20;
+        
+        // Quadro de resultado geral
+        doc.setFillColor(245, 247, 255);
+        doc.rect(40, yPos, 515, 50, 'F');
+        doc.setDrawColor(200, 200, 200);
+        doc.rect(40, yPos, 515, 50);
+        
+        doc.setFontSize(11);
+        doc.setTextColor(100, 100, 100);
+        doc.setFont('helvetica', 'normal');
+        
+        // Coluna 1
+        doc.text('Total Produção:', 50, yPos + 20);
+        doc.text('Valor Total:', 50, yPos + 35);
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 30, 30);
+        doc.text(`${totalGeralProducao.toFixed(3)} kg`, 150, yPos + 20);
+        doc.text(totalGeralProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 150, yPos + 35);
+        
+        // Coluna 2
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text('Total Sobras:', 250, yPos + 20);
+        doc.text('Total Perdas:', 250, yPos + 35);
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 30, 30);
+        doc.text(`${totalGeralSobras.toFixed(3)} kg`, 350, yPos + 20);
+        doc.text(`${totalGeralPerdas.toFixed(3)} kg`, 350, yPos + 35);
+        
+        // Coluna 3
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text('Prejuízo Total:', 450, yPos + 20);
+        doc.text('Produtos:', 450, yPos + 35);
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(231, 76, 60);
+        doc.text(totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 540, yPos + 20);
+        doc.setTextColor(30, 30, 30);
+        doc.text(Object.keys(produtosAgrupados).length.toString(), 540, yPos + 35);
+        
+        yPos += 70;
+        
+        // Agora, para cada produto individualmente
+        Object.values(produtosAgrupados).forEach((prod, index) => {
+            // Verificar se precisa de nova página
+            if (yPos > 650) {
+                doc.addPage();
+                yPos = 50;
+            }
             
-            // Cabeçalho idêntico ao modelo
-            doc.setFontSize(24);
-            doc.setTextColor(44, 62, 80);
-            doc.text('RELATÓRIO DE PRODUÇÃO', 40, yPos);
+            // Título do produto
+            doc.setFontSize(16);
+            doc.setTextColor(41, 98, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${prod.produto} (Código: ${prod.codigo})`, 40, yPos);
+            yPos += 25;
+            
+            // Resumo individual do produto
+            doc.setFontSize(12);
+            doc.setTextColor(30, 30, 30);
+            doc.setFont('helvetica', 'bold');
+            doc.text('RESUMO DO PRODUTO:', 40, yPos);
+            yPos += 20;
+            
+            // Quadro de resumo individual
+            doc.setFillColor(248, 249, 250);
+            doc.rect(40, yPos, 515, 60, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(40, yPos, 515, 60);
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            
+            // Linha 1: Produção
+            doc.setTextColor(100, 100, 100);
+            doc.text('Produção Normal:', 50, yPos + 20);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 30, 30);
+            doc.text(`${prod.totalProducao.toFixed(3)} kg`, 150, yPos + 20);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Valor Total:', 200, yPos + 20);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(39, 174, 96);
+            doc.text(prod.totalProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 280, yPos + 20);
+            
+            // Linha 2: Sobras
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Sobras Transformadas:', 50, yPos + 35);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 30, 30);
+            doc.text(`${prod.totalSobras.toFixed(3)} kg`, 150, yPos + 35);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Prejuízo Sobras:', 200, yPos + 35);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(52, 152, 219);
+            doc.text(prod.totalSobrasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 280, yPos + 35);
+            
+            // Linha 3: Perdas
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Perdas/Descartes:', 50, yPos + 50);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 30, 30);
+            doc.text(`${prod.totalPerdas.toFixed(3)} kg`, 150, yPos + 50);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Prejuízo Perdas:', 200, yPos + 50);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(231, 76, 60);
+            doc.text(prod.totalPerdasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 280, yPos + 50);
+            
+            // Calcular Eficiência
+            const pesoTotal = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
+            const eficiencia = pesoTotal > 0 ? (prod.totalProducao / pesoTotal) * 100 : 0;
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Eficiência:', 350, yPos + 35);
+            doc.setFont('helvetica', 'bold');
+            
+            // Cor da eficiência baseada no valor
+            if (eficiencia >= 80) {
+                doc.setTextColor(39, 174, 96);
+            } else if (eficiencia >= 60) {
+                doc.setTextColor(241, 196, 15);
+            } else {
+                doc.setTextColor(231, 76, 60);
+            }
+            
+            doc.text(`${eficiencia.toFixed(1)}%`, 420, yPos + 35);
+            
+            yPos += 80;
+            
+            // Detalhamento da Produção Normal (se houver)
+            if (prod.producaoNormal.length > 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(39, 174, 96);
+                doc.setFont('helvetica', 'bold');
+                doc.text('DETALHAMENTO DA PRODUÇÃO NORMAL:', 40, yPos);
+                yPos += 20;
+                
+                const headersProducao = [['Data', 'Peso Líq. (kg)', 'Valor/kg (R$)', 'Valor Total (R$)']];
+                const dataProducao = prod.producaoNormal.map(registro => [
+                    moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm'),
+                    registro.liquido.toFixed(3),
+                    registro.valorKg.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                    registro.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                ]);
+                
+                doc.autoTable({
+                    startY: yPos,
+                    head: headersProducao,
+                    body: dataProducao,
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: [39, 174, 96],
+                        textColor: [255, 255, 255],
+                        fontSize: 9,
+                        fontStyle: 'bold'
+                    },
+                    bodyStyles: {
+                        fontSize: 8
+                    },
+                    margin: { left: 40, right: 40 },
+                    tableWidth: 'auto'
+                });
+                
+                yPos = doc.lastAutoTable.finalY + 20;
+            }
+            
+            // Detalhamento das Sobras (se houver)
+            if (prod.producaoSobras.length > 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(52, 152, 219);
+                doc.setFont('helvetica', 'bold');
+                doc.text('TRANSFORMAÇÕES DE SOBRAS:', 40, yPos);
+                yPos += 20;
+                
+                const headersSobras = [['Data', 'Peso Inicial (kg)', 'Destino', 'Peso Final (kg)', 'Prejuízo (R$)']];
+                const dataSobras = prod.producaoSobras.map(registro => [
+                    moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm'),
+                    registro.pesoInicial.toFixed(3),
+                    registro.destino === 'farinha' ? 'Farinha de Rosca' : 'Torrada Simples',
+                    registro.pesoFinal.toFixed(3),
+                    registro.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                ]);
+                
+                doc.autoTable({
+                    startY: yPos,
+                    head: headersSobras,
+                    body: dataSobras,
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: [52, 152, 219],
+                        textColor: [255, 255, 255],
+                        fontSize: 9,
+                        fontStyle: 'bold'
+                    },
+                    bodyStyles: {
+                        fontSize: 8
+                    },
+                    margin: { left: 40, right: 40 },
+                    tableWidth: 'auto'
+                });
+                
+                yPos = doc.lastAutoTable.finalY + 20;
+            }
+            
+            // Detalhamento das Perdas (se houver)
+            if (prod.producaoPerdas.length > 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(231, 76, 60);
+                doc.setFont('helvetica', 'bold');
+                doc.text('PERDAS E DESCARTES:', 40, yPos);
+                yPos += 20;
+                
+                const headersPerdas = [['Data', 'Peso Perdido (kg)', 'Valor Perdido (R$)', 'Observações']];
+                const dataPerdas = prod.producaoPerdas.map(registro => [
+                    moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm'),
+                    registro.pesoInicial.toFixed(3),
+                    registro.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                    registro.observacoes || '-'
+                ]);
+                
+                doc.autoTable({
+                    startY: yPos,
+                    head: headersPerdas,
+                    body: dataPerdas,
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: [231, 76, 60],
+                        textColor: [255, 255, 255],
+                        fontSize: 9,
+                        fontStyle: 'bold'
+                    },
+                    bodyStyles: {
+                        fontSize: 8
+                    },
+                    margin: { left: 40, right: 40 },
+                    tableWidth: 'auto'
+                });
+                
+                yPos = doc.lastAutoTable.finalY + 40;
+            }
+            
+            // Linha separadora entre produtos (exceto o último)
+            if (index < Object.values(produtosAgrupados).length - 1) {
+                doc.setDrawColor(200, 200, 200);
+                doc.setLineWidth(0.5);
+                doc.line(40, yPos, 555, yPos);
+                yPos += 20;
+            }
+        });
+        
+        // Adicionar página de análise final se houver múltiplos produtos
+        if (Object.keys(produtosAgrupados).length > 1) {
+            doc.addPage();
+            yPos = 50;
+            
+            doc.setFontSize(16);
+            doc.setTextColor(30, 30, 30);
+            doc.setFont('helvetica', 'bold');
+            doc.text('ANÁLISE COMPARATIVA ENTRE PRODUTOS', 40, yPos);
             yPos += 30;
             
-            doc.setFontSize(11);
-            doc.setTextColor(100, 100, 100);
-            doc.text(`Período: ${moment(inicio).locale('pt-br').format('DD/MM/YYYY')} até ${moment(fim).locale('pt-br').format('DD/MM/YYYY')}`, 40, yPos);
-            yPos += 15;
-            doc.text(`Gerado em: ${moment().locale('pt-br').format('DD/MM/YYYY HH:mm')}`, 40, yPos);
-            yPos += 40;
+            // Tabela comparativa
+            const headersComparacao = [['Produto', 'Produção (kg)', 'Valor (R$)', 'Sobras (kg)', 'Perdas (kg)', 'Prejuízo (R$)', 'Eficiência']];
             
-            // Separar por tipo para o relatório
-            const producaoNormal = registrosPeriodo.filter(r => r.tipo === 'normal');
-            const producaoSobra = registrosPeriodo.filter(r => r.tipo === 'sobra');
-            const producaoPerda = registrosPeriodo.filter(r => r.tipo === 'perda');
-            
-            // Agrupar produção normal por produto para o resumo
-            const produtosResumo = {};
-            producaoNormal.forEach(registro => {
-                if (!produtosResumo[registro.produto]) {
-                    produtosResumo[registro.produto] = {
-                        codigo: registro.codigo,
-                        quantidade: 0,
-                        pesoTotal: 0,
-                        valorTotal: 0
-                    };
-                }
-                produtosResumo[registro.produto].quantidade++;
-                produtosResumo[registro.produto].pesoTotal += registro.liquido;
-                produtosResumo[registro.produto].valorTotal += registro.valorTotal;
+            const dataComparacao = Object.values(produtosAgrupados).map(prod => {
+                const pesoTotal = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
+                const eficiencia = pesoTotal > 0 ? (prod.totalProducao / pesoTotal) * 100 : 0;
+                
+                return [
+                    prod.produto,
+                    prod.totalProducao.toFixed(3),
+                    prod.totalProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                    prod.totalSobras.toFixed(3),
+                    prod.totalPerdas.toFixed(3),
+                    (prod.totalSobrasPrejuizo + prod.totalPerdasPrejuizo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                    `${eficiencia.toFixed(1)}%`
+                ];
             });
             
-            // RESUMO POR PRODUTO
-            if (Object.keys(produtosResumo).length > 0) {
-                doc.setFontSize(14);
-                doc.setTextColor(0, 0, 0);
-                doc.setFont(undefined, 'bold');
-                doc.text('RESUMO POR PRODUTO:', 40, yPos);
-                yPos += 25;
-                
-                // Para cada produto no resumo
-                Object.entries(produtosResumo).forEach(([produto, dados]) => {
-                    // Verificar se precisa de nova página
-                    if (yPos > 700) {
-                        doc.addPage();
-                        yPos = 40;
+            // Ordenar por produção (maior para menor)
+            dataComparacao.sort((a, b) => parseFloat(b[1]) - parseFloat(a[1]));
+            
+            doc.autoTable({
+                startY: yPos,
+                head: headersComparacao,
+                body: dataComparacao,
+                theme: 'grid',
+                headStyles: {
+                    fillColor: [41, 98, 255],
+                    textColor: [255, 255, 255],
+                    fontSize: 9,
+                    fontStyle: 'bold'
+                },
+                bodyStyles: {
+                    fontSize: 8
+                },
+                margin: { left: 40, right: 40 },
+                styles: {
+                    cellPadding: 5,
+                    overflow: 'linebreak'
+                },
+                columnStyles: {
+                    0: { cellWidth: 'auto' },
+                    1: { cellWidth: 70, halign: 'right' },
+                    2: { cellWidth: 80, halign: 'right' },
+                    3: { cellWidth: 70, halign: 'right' },
+                    4: { cellWidth: 70, halign: 'right' },
+                    5: { cellWidth: 80, halign: 'right' },
+                    6: { cellWidth: 60, halign: 'right' }
+                },
+                didParseCell: function(data) {
+                    // Colorir células de eficiência
+                    if (data.column.index === 6) {
+                        const eficiencia = parseFloat(data.cell.text[0]);
+                        if (eficiencia >= 80) {
+                            data.cell.styles.fillColor = [232, 245, 233];
+                            data.cell.styles.textColor = [39, 174, 96];
+                        } else if (eficiencia >= 60) {
+                            data.cell.styles.fillColor = [255, 253, 231];
+                            data.cell.styles.textColor = [241, 196, 15];
+                        } else {
+                            data.cell.styles.fillColor = [255, 243, 224];
+                            data.cell.styles.textColor = [230, 126, 34];
+                        }
                     }
                     
-                    // Nome do produto em negrito
-                    doc.setFontSize(12);
-                    doc.setTextColor(0, 0, 0);
-                    doc.setFont(undefined, 'bold');
-                    doc.text(`${produto} (Código: ${dados.codigo})`, 40, yPos);
-                    yPos += 20;
-                    
-                    // Detalhes
-                    doc.setFontSize(10);
-                    doc.setFont(undefined, 'normal');
-                    doc.setTextColor(0, 0, 0);
-                    
-                    doc.text(`Total Produzido: ${dados.pesoTotal.toFixed(3)} kg`, 60, yPos);
-                    yPos += 15;
-                    
-                    doc.text(`Valor Total: ${dados.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 60, yPos);
-                    yPos += 15;
-                    
-                    doc.text(`Total de pesagens diárias: ${dados.quantidade}`, 60, yPos);
-                    yPos += 25;
-                });
-            }
-            
-            // Se houver sobras e perdas, adicionar seção REMANEJAMENTOS
-            if (producaoSobra.length > 0 || producaoPerda.length > 0) {
-                if (yPos > 700) {
-                    doc.addPage();
-                    yPos = 40;
+                    // Colorir células de prejuízo
+                    if (data.column.index === 5) {
+                        const valor = parseFloat(data.cell.text[0].replace('R$', '').replace('.', '').replace(',', '.'));
+                        if (valor > 0) {
+                            data.cell.styles.fillColor = [255, 235, 238];
+                            data.cell.styles.textColor = [231, 76, 60];
+                        }
+                    }
                 }
-                
-                doc.setFontSize(14);
-                doc.setTextColor(0, 0, 0);
-                doc.setFont(undefined, 'bold');
-                doc.text('REMANEJAMENTOS', 40, yPos);
-                yPos += 25;
-                
-                // Processar cada remanejamento individualmente
-                [...producaoSobra, ...producaoPerda].forEach((remanejamento, index) => {
-                    if (yPos > 700) {
-                        doc.addPage();
-                        yPos = 40;
-                    }
-                    
-                    // Tipo
-                    const tipoText = remanejamento.tipo === 'sobra' ? 'Sobra' : 'Perda';
-                    doc.setFontSize(11);
-                    doc.setTextColor(0, 0, 0);
-                    doc.setFont(undefined, 'bold');
-                    doc.text(`Tipo: ${tipoText}`, 40, yPos);
-                    yPos += 15;
-                    
-                    // Produto
-                    doc.setFont(undefined, 'normal');
-                    doc.text(`Produto: ${remanejamento.produto}`, 40, yPos);
-                    yPos += 15;
-                    
-                    // Peso total
-                    doc.text(`Peso total: ${remanejamento.pesoInicial.toFixed(3)} kg`, 40, yPos);
-                    yPos += 15;
-                    
-                    // Valor kg
-                    doc.text(`Valor kg: ${remanejamento.valorOrigem.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 40, yPos);
-                    yPos += 15;
-                    
-                    // Total parcial
-                    const totalParcial = remanejamento.pesoInicial * remanejamento.valorOrigem;
-                    doc.text(`Total Parcial: ${totalParcial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 40, yPos);
-                    yPos += 20;
-                    
-                    // Se for sobra, mostrar destino
-                    if (remanejamento.tipo === 'sobra') {
-                        doc.setFont(undefined, 'bold');
-                        doc.text('PRODUTO REMANEJADO (DESTINO)', 40, yPos);
-                        yPos += 15;
-                        
-                        doc.setFont(undefined, 'normal');
-                        const destino = remanejamento.destino === 'farinha' ? 'Farinha de Rosca' : 'Torrada Simples';
-                        doc.text(`${destino}:`, 40, yPos);
-                        yPos += 15;
-                        
-                        doc.text(`Peso Final: ${remanejamento.pesoFinal.toFixed(3)} kg`, 60, yPos);
-                        yPos += 15;
-                        
-                        doc.text(`Valor kg: ${remanejamento.valorDestino.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 60, yPos);
-                        yPos += 15;
-                        
-                        doc.text(`Valor Final: ${remanejamento.valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 60, yPos);
-                        yPos += 15;
-                        
-                        doc.text(`Diferença kg: ${remanejamento.diferencaPeso.toFixed(3)} kg`, 60, yPos);
-                        yPos += 15;
-                        
-                        doc.text(`Prejuízo: ${remanejamento.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 60, yPos);
-                        yPos += 25;
-                    } else {
-                        // Para perdas
-                        doc.text(`Prejuízo Total: ${remanejamento.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 40, yPos);
-                        yPos += 25;
-                    }
-                    
-                    // Linha separadora
-                    doc.setDrawColor(200, 200, 200);
-                    doc.line(40, yPos, 555, yPos);
-                    yPos += 25;
-                });
-            }
+            });
             
-            // Número de páginas
-            const pageCount = doc.internal.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setTextColor(150, 150, 150);
-                doc.text(
-                    `Página ${i} de ${pageCount}`,
-                    doc.internal.pageSize.width - 100,
-                    doc.internal.pageSize.height - 20
-                );
-            }
+            yPos = doc.lastAutoTable.finalY + 30;
             
-            // Salvar PDF
-            const nomeArquivo = `relatorio_producao_${moment().format('YYYYMMDD_HHmmss')}.pdf`;
-            doc.save(nomeArquivo);
+            // Conclusão
+            doc.setFontSize(12);
+            doc.setTextColor(30, 30, 30);
+            doc.setFont('helvetica', 'bold');
+            doc.text('CONCLUSÃO:', 40, yPos);
+            yPos += 20;
             
-            this.mostrarNotificacao(`PDF gerado com sucesso: ${nomeArquivo}`, 'success');
-        } catch (error) {
-            console.error('Erro ao gerar PDF:', error);
-            this.mostrarNotificacao('Erro ao gerar PDF. Verifique o console.', 'error');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.text(`O período analisado compreende ${Object.keys(produtosAgrupados).length} produtos diferentes, ` +
+                    `com produção total de ${totalGeralProducao.toFixed(3)} kg e valor total de ` +
+                    `${totalGeralProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
+                    `O prejuízo total das sobras e perdas foi de ` +
+                    `${totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`, 
+                    40, yPos, { maxWidth: 515 });
         }
+        
+        // Rodapé em todas as páginas
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            
+            // Rodapé com informações
+            doc.setFontSize(8);
+            doc.setTextColor(150, 150, 150);
+            doc.setFont('helvetica', 'normal');
+            
+            // Linha do rodapé
+            doc.setDrawColor(200, 200, 200);
+            doc.setLineWidth(0.5);
+            doc.line(40, doc.internal.pageSize.height - 40, 555, doc.internal.pageSize.height - 40);
+            
+            // Textos do rodapé
+            doc.text('Sistema de Controle de Produção • Relatório por Produto', 40, doc.internal.pageSize.height - 25);
+            doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 100, doc.internal.pageSize.height - 25);
+            
+            // Adicionar logo ou identificação da empresa
+            if (i === 1) {
+                doc.setFontSize(10);
+                doc.setTextColor(41, 98, 255);
+                doc.setFont('helvetica', 'bold');
+                doc.text('CONTROLE DE PRODUÇÃO E QUALIDADE', doc.internal.pageSize.width / 2, 30, { align: 'center' });
+            }
+        }
+        
+        // Salvar PDF
+        const nomeArquivo = `relatorio_producao_${moment().format('YYYYMMDD_HHmmss')}.pdf`;
+        doc.save(nomeArquivo);
+        
+        this.mostrarNotificacao(`PDF gerado com sucesso: ${nomeArquivo}`, 'success');
+    } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        this.mostrarNotificacao('Erro ao gerar PDF. Verifique se todos os dados estão corretos.', 'error');
     }
+}
     
     mostrarModal(mensagem, callbackConfirmar) {
         document.getElementById('modal-message').textContent = mensagem;
