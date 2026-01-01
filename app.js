@@ -1634,7 +1634,8 @@ class SistemaProducao {
         }
     }
     
-    async gerarPDF() {
+  
+async gerarPDF() {
     const inicio = document.getElementById('advanced-start').value;
     const fim = document.getElementById('advanced-end').value;
     const tipoRelatorio = document.getElementById('filter-tipo-detalhado').value;
@@ -1685,30 +1686,40 @@ class SistemaProducao {
     try {
         // Carregar a biblioteca jsPDF
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('p', 'pt', 'a4');
+        
+        // ALTERAÇÃO PRINCIPAL: Mude 'p' (portrait) para 'l' (landscape)
+        const doc = new jsPDF('l', 'pt', 'a4');
+        
+        // Obter dimensões da página em paisagem
+        const pageWidth = doc.internal.pageSize.width;
+        const pageHeight = doc.internal.pageSize.height;
         
         let yPos = 50;
         
-        // Cabeçalho profissional
+        // Cabeçalho profissional - ajustado para paisagem
         doc.setFontSize(24);
         doc.setTextColor(30, 30, 30);
         doc.setFont('helvetica', 'bold');
-        doc.text('RELATÓRIO DE PRODUÇÃO - POR PRODUTO', 40, yPos);
+        
+        // Centralizar título no layout paisagem
+        const title = 'RELATÓRIO DE PRODUÇÃO - POR PRODUTO';
+        const titleWidth = doc.getStringUnitWidth(title) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+        const titleX = (pageWidth - titleWidth) / 2;
+        doc.text(title, titleX, yPos);
         yPos += 35;
         
-        // Linha decorativa
+        // Linha decorativa - ajustada para largura maior do paisagem
         doc.setDrawColor(41, 98, 255);
         doc.setLineWidth(2);
-        doc.line(40, yPos, 555, yPos);
+        doc.line(40, yPos, pageWidth - 40, yPos);
         yPos += 20;
         
-        // Informações do período
+        // Informações do período - mais espaço para texto
         doc.setFontSize(11);
         doc.setTextColor(100, 100, 100);
         doc.setFont('helvetica', 'normal');
         doc.text(`Período: ${moment(inicio).locale('pt-br').format('DD/MM/YYYY')} até ${moment(fim).locale('pt-br').format('DD/MM/YYYY')}`, 40, yPos);
-        yPos += 15;
-        doc.text(`Gerado em: ${moment().locale('pt-br').format('DD/MM/YYYY HH:mm')}`, 40, yPos);
+        doc.text(`Gerado em: ${moment().locale('pt-br').format('DD/MM/YYYY HH:mm')}`, pageWidth - 200, yPos);
         yPos += 30;
         
         // Agrupar registros por produto para resumo individual
@@ -1756,24 +1767,34 @@ class SistemaProducao {
         const totalGeralPrejuizo = Object.values(produtosAgrupados).reduce((sum, prod) => 
             sum + prod.totalSobrasPrejuizo + prod.totalPerdasPrejuizo, 0);
         
-        // RESULTADO GERAL (visão rápida)
+        // Calcular eficiência média
+        const eficienciaMedia = Object.values(produtosAgrupados).reduce((sum, prod) => {
+            const pesoTotal = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
+            return sum + (pesoTotal > 0 ? (prod.totalProducao / pesoTotal) * 100 : 0);
+        }, 0) / (Object.keys(produtosAgrupados).length || 1);
+        
+        // RESULTADO GERAL (visão rápida) - ajustado para paisagem
         doc.setFontSize(14);
         doc.setTextColor(30, 30, 30);
         doc.setFont('helvetica', 'bold');
         doc.text('RESULTADO GERAL DO PERÍODO', 40, yPos);
         yPos += 20;
         
-        // Quadro de resultado geral
+        // Quadro de resultado geral - largura maior em paisagem
+        const quadroWidth = pageWidth - 80;
         doc.setFillColor(245, 247, 255);
-        doc.rect(40, yPos, 515, 50, 'F');
+        doc.rect(40, yPos, quadroWidth, 50, 'F');
         doc.setDrawColor(200, 200, 200);
-        doc.rect(40, yPos, 515, 50);
+        doc.rect(40, yPos, quadroWidth, 50);
         
         doc.setFontSize(11);
         doc.setTextColor(100, 100, 100);
         doc.setFont('helvetica', 'normal');
         
-        // Coluna 1
+        // Dividir em 4 colunas para melhor aproveitamento do espaço horizontal
+        const colWidth = quadroWidth / 4;
+        
+        // Coluna 1: Produção
         doc.text('Total Produção:', 50, yPos + 20);
         doc.text('Valor Total:', 50, yPos + 35);
         
@@ -1782,36 +1803,51 @@ class SistemaProducao {
         doc.text(`${totalGeralProducao.toFixed(3)} kg`, 150, yPos + 20);
         doc.text(totalGeralProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 150, yPos + 35);
         
-        // Coluna 2
+        // Coluna 2: Sobras e Perdas
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 100, 100);
-        doc.text('Total Sobras:', 250, yPos + 20);
-        doc.text('Total Perdas:', 250, yPos + 35);
+        doc.text('Total Sobras:', 40 + colWidth, yPos + 20);
+        doc.text('Total Perdas:', 40 + colWidth, yPos + 35);
         
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(30, 30, 30);
-        doc.text(`${totalGeralSobras.toFixed(3)} kg`, 350, yPos + 20);
-        doc.text(`${totalGeralPerdas.toFixed(3)} kg`, 350, yPos + 35);
+        doc.text(`${totalGeralSobras.toFixed(3)} kg`, 40 + colWidth + 100, yPos + 20);
+        doc.text(`${totalGeralPerdas.toFixed(3)} kg`, 40 + colWidth + 100, yPos + 35);
         
-        // Coluna 3
+        // Coluna 3: Prejuízo e Produtos
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 100, 100);
-        doc.text('Prejuízo Total:', 450, yPos + 20);
-        doc.text('Produtos:', 450, yPos + 35);
+        doc.text('Prejuízo Total:', 40 + (colWidth * 2), yPos + 20);
+        doc.text('Produtos Analisados:', 40 + (colWidth * 2), yPos + 35);
         
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(231, 76, 60);
-        doc.text(totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 540, yPos + 20);
+        doc.text(totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 40 + (colWidth * 2) + 100, yPos + 20);
         doc.setTextColor(30, 30, 30);
-        doc.text(Object.keys(produtosAgrupados).length.toString(), 540, yPos + 35);
+        doc.text(Object.keys(produtosAgrupados).length.toString(), 40 + (colWidth * 2) + 100, yPos + 35);
+        
+        // Coluna 4: Eficiência Média
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text('Eficiência Média:', 40 + (colWidth * 3), yPos + 20);
+        
+        doc.setFont('helvetica', 'bold');
+        if (eficienciaMedia >= 80) {
+            doc.setTextColor(39, 174, 96);
+        } else if (eficienciaMedia >= 60) {
+            doc.setTextColor(241, 196, 15);
+        } else {
+            doc.setTextColor(231, 76, 60);
+        }
+        doc.text(`${eficienciaMedia.toFixed(1)}%`, 40 + (colWidth * 3) + 100, yPos + 20);
         
         yPos += 70;
         
         // Agora, para cada produto individualmente
         Object.values(produtosAgrupados).forEach((prod, index) => {
-            // Verificar se precisa de nova página
-            if (yPos > 650) {
-                doc.addPage();
+            // Verificar se precisa de nova página - altura menor em paisagem
+            if (yPos > 500) {
+                doc.addPage('l', 'a4'); // Nova página também em paisagem
                 yPos = 50;
             }
             
@@ -1819,7 +1855,13 @@ class SistemaProducao {
             doc.setFontSize(16);
             doc.setTextColor(41, 98, 255);
             doc.setFont('helvetica', 'bold');
-            doc.text(`${prod.produto} (Código: ${prod.codigo})`, 40, yPos);
+            
+            // Truncar nome do produto se muito longo
+            let produtoNome = prod.produto;
+            if (produtoNome.length > 60) {
+                produtoNome = produtoNome.substring(0, 57) + '...';
+            }
+            doc.text(`${produtoNome} (Código: ${prod.codigo})`, 40, yPos);
             yPos += 25;
             
             // Resumo individual do produto
@@ -1829,16 +1871,20 @@ class SistemaProducao {
             doc.text('RESUMO DO PRODUTO:', 40, yPos);
             yPos += 20;
             
-            // Quadro de resumo individual
+            // Quadro de resumo individual - largura maior
             doc.setFillColor(248, 249, 250);
-            doc.rect(40, yPos, 515, 60, 'F');
+            doc.rect(40, yPos, quadroWidth, 60, 'F');
             doc.setDrawColor(200, 200, 200);
-            doc.rect(40, yPos, 515, 60);
+            doc.rect(40, yPos, quadroWidth, 60);
             
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             
-            // Linha 1: Produção
+            // Calcular eficiência do produto
+            const pesoTotalProd = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
+            const eficienciaProd = pesoTotalProd > 0 ? (prod.totalProducao / pesoTotalProd) * 100 : 0;
+            
+            // Linha 1: Produção e Valor
             doc.setTextColor(100, 100, 100);
             doc.text('Produção Normal:', 50, yPos + 20);
             doc.setFont('helvetica', 'bold');
@@ -1847,10 +1893,10 @@ class SistemaProducao {
             
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 100, 100);
-            doc.text('Valor Total:', 200, yPos + 20);
+            doc.text('Valor Total:', 250, yPos + 20);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(39, 174, 96);
-            doc.text(prod.totalProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 280, yPos + 20);
+            doc.text(prod.totalProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 320, yPos + 20);
             
             // Linha 2: Sobras
             doc.setFont('helvetica', 'normal');
@@ -1862,10 +1908,10 @@ class SistemaProducao {
             
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 100, 100);
-            doc.text('Prejuízo Sobras:', 200, yPos + 35);
+            doc.text('Prejuízo Sobras:', 250, yPos + 35);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(52, 152, 219);
-            doc.text(prod.totalSobrasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 280, yPos + 35);
+            doc.text(prod.totalSobrasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 320, yPos + 35);
             
             // Linha 3: Perdas
             doc.setFont('helvetica', 'normal');
@@ -1877,30 +1923,27 @@ class SistemaProducao {
             
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 100, 100);
-            doc.text('Prejuízo Perdas:', 200, yPos + 50);
+            doc.text('Prejuízo Perdas:', 250, yPos + 50);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(231, 76, 60);
-            doc.text(prod.totalPerdasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 280, yPos + 50);
+            doc.text(prod.totalPerdasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 320, yPos + 50);
             
-            // Calcular Eficiência
-            const pesoTotal = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
-            const eficiencia = pesoTotal > 0 ? (prod.totalProducao / pesoTotal) * 100 : 0;
-            
+            // Eficiência do produto
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 100, 100);
-            doc.text('Eficiência:', 350, yPos + 35);
+            doc.text('Eficiência:', 450, yPos + 35);
             doc.setFont('helvetica', 'bold');
             
             // Cor da eficiência baseada no valor
-            if (eficiencia >= 80) {
+            if (eficienciaProd >= 80) {
                 doc.setTextColor(39, 174, 96);
-            } else if (eficiencia >= 60) {
+            } else if (eficienciaProd >= 60) {
                 doc.setTextColor(241, 196, 15);
             } else {
                 doc.setTextColor(231, 76, 60);
             }
             
-            doc.text(`${eficiencia.toFixed(1)}%`, 420, yPos + 35);
+            doc.text(`${eficienciaProd.toFixed(1)}%`, 520, yPos + 35);
             
             yPos += 80;
             
@@ -1935,7 +1978,11 @@ class SistemaProducao {
                         fontSize: 8
                     },
                     margin: { left: 40, right: 40 },
-                    tableWidth: 'auto'
+                    tableWidth: 'auto',
+                    styles: {
+                        overflow: 'linebreak',
+                        cellPadding: 3
+                    }
                 });
                 
                 yPos = doc.lastAutoTable.finalY + 20;
@@ -1973,7 +2020,11 @@ class SistemaProducao {
                         fontSize: 8
                     },
                     margin: { left: 40, right: 40 },
-                    tableWidth: 'auto'
+                    tableWidth: 'auto',
+                    styles: {
+                        overflow: 'linebreak',
+                        cellPadding: 3
+                    }
                 });
                 
                 yPos = doc.lastAutoTable.finalY + 20;
@@ -1992,7 +2043,8 @@ class SistemaProducao {
                     moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm'),
                     registro.pesoInicial.toFixed(3),
                     registro.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                    registro.observacoes || '-'
+                    (registro.observacoes && registro.observacoes.length > 40) ? 
+                      registro.observacoes.substring(0, 37) + '...' : (registro.observacoes || '-')
                 ]);
                 
                 doc.autoTable({
@@ -2010,7 +2062,11 @@ class SistemaProducao {
                         fontSize: 8
                     },
                     margin: { left: 40, right: 40 },
-                    tableWidth: 'auto'
+                    tableWidth: 'auto',
+                    styles: {
+                        overflow: 'linebreak',
+                        cellPadding: 3
+                    }
                 });
                 
                 yPos = doc.lastAutoTable.finalY + 40;
@@ -2020,31 +2076,41 @@ class SistemaProducao {
             if (index < Object.values(produtosAgrupados).length - 1) {
                 doc.setDrawColor(200, 200, 200);
                 doc.setLineWidth(0.5);
-                doc.line(40, yPos, 555, yPos);
+                doc.line(40, yPos, pageWidth - 40, yPos);
                 yPos += 20;
             }
         });
         
         // Adicionar página de análise final se houver múltiplos produtos
         if (Object.keys(produtosAgrupados).length > 1) {
-            doc.addPage();
+            doc.addPage('l', 'a4'); // Página em paisagem
             yPos = 50;
             
             doc.setFontSize(16);
             doc.setTextColor(30, 30, 30);
             doc.setFont('helvetica', 'bold');
-            doc.text('ANÁLISE COMPARATIVA ENTRE PRODUTOS', 40, yPos);
+            
+            const analiseTitle = 'ANÁLISE COMPARATIVA ENTRE PRODUTOS';
+            const analiseTitleWidth = doc.getStringUnitWidth(analiseTitle) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+            const analiseTitleX = (pageWidth - analiseTitleWidth) / 2;
+            doc.text(analiseTitle, analiseTitleX, yPos);
             yPos += 30;
             
-            // Tabela comparativa
+            // Tabela comparativa - mais colunas em paisagem
             const headersComparacao = [['Produto', 'Produção (kg)', 'Valor (R$)', 'Sobras (kg)', 'Perdas (kg)', 'Prejuízo (R$)', 'Eficiência']];
             
             const dataComparacao = Object.values(produtosAgrupados).map(prod => {
                 const pesoTotal = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
                 const eficiencia = pesoTotal > 0 ? (prod.totalProducao / pesoTotal) * 100 : 0;
                 
+                // Truncar nome do produto
+                let nomeProduto = prod.produto;
+                if (nomeProduto.length > 30) {
+                    nomeProduto = nomeProduto.substring(0, 27) + '...';
+                }
+                
                 return [
-                    prod.produto,
+                    nomeProduto,
                     prod.totalProducao.toFixed(3),
                     prod.totalProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
                     prod.totalSobras.toFixed(3),
@@ -2073,17 +2139,17 @@ class SistemaProducao {
                 },
                 margin: { left: 40, right: 40 },
                 styles: {
-                    cellPadding: 5,
+                    cellPadding: 4,
                     overflow: 'linebreak'
                 },
                 columnStyles: {
-                    0: { cellWidth: 'auto' },
-                    1: { cellWidth: 70, halign: 'right' },
-                    2: { cellWidth: 80, halign: 'right' },
-                    3: { cellWidth: 70, halign: 'right' },
-                    4: { cellWidth: 70, halign: 'right' },
-                    5: { cellWidth: 80, halign: 'right' },
-                    6: { cellWidth: 60, halign: 'right' }
+                    0: { cellWidth: 120, halign: 'left' },
+                    1: { cellWidth: 80, halign: 'right' },
+                    2: { cellWidth: 90, halign: 'right' },
+                    3: { cellWidth: 80, halign: 'right' },
+                    4: { cellWidth: 80, halign: 'right' },
+                    5: { cellWidth: 90, halign: 'right' },
+                    6: { cellWidth: 70, halign: 'right' }
                 },
                 didParseCell: function(data) {
                     // Colorir células de eficiência
@@ -2103,10 +2169,13 @@ class SistemaProducao {
                     
                     // Colorir células de prejuízo
                     if (data.column.index === 5) {
-                        const valor = parseFloat(data.cell.text[0].replace('R$', '').replace('.', '').replace(',', '.'));
-                        if (valor > 0) {
-                            data.cell.styles.fillColor = [255, 235, 238];
-                            data.cell.styles.textColor = [231, 76, 60];
+                        const valorText = data.cell.text[0];
+                        if (valorText !== '-') {
+                            const valor = parseFloat(valorText.replace('R$', '').replace('.', '').replace(',', '.'));
+                            if (valor > 0) {
+                                data.cell.styles.fillColor = [255, 235, 238];
+                                data.cell.styles.textColor = [231, 76, 60];
+                            }
                         }
                     }
                 }
@@ -2123,15 +2192,19 @@ class SistemaProducao {
             
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(10);
-            doc.text(`O período analisado compreende ${Object.keys(produtosAgrupados).length} produtos diferentes, ` +
-                    `com produção total de ${totalGeralProducao.toFixed(3)} kg e valor total de ` +
-                    `${totalGeralProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
-                    `O prejuízo total das sobras e perdas foi de ` +
-                    `${totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`, 
-                    40, yPos, { maxWidth: 515 });
+            
+            const conclusaoText = `O período analisado compreende ${Object.keys(produtosAgrupados).length} produtos diferentes, ` +
+                                `com produção total de ${totalGeralProducao.toFixed(3)} kg e valor total de ` +
+                                `${totalGeralProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
+                                `Foram transformadas ${totalGeralSobras.toFixed(3)} kg em sobras e registradas ` +
+                                `${totalGeralPerdas.toFixed(3)} kg em perdas/descartes. O prejuízo total foi de ` +
+                                `${totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
+                                `A eficiência média de produção foi de ${eficienciaMedia.toFixed(1)}%.`;
+            
+            doc.text(conclusaoText, 40, yPos, { maxWidth: pageWidth - 80 });
         }
         
-        // Rodapé em todas as páginas
+        // Rodapé em todas as páginas - ajustado para paisagem
         const pageCount = doc.internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
             doc.setPage(i);
@@ -2141,21 +2214,24 @@ class SistemaProducao {
             doc.setTextColor(150, 150, 150);
             doc.setFont('helvetica', 'normal');
             
-            // Linha do rodapé
+            // Linha do rodapé - largura total
             doc.setDrawColor(200, 200, 200);
             doc.setLineWidth(0.5);
-            doc.line(40, doc.internal.pageSize.height - 40, 555, doc.internal.pageSize.height - 40);
+            doc.line(40, pageHeight - 40, pageWidth - 40, pageHeight - 40);
             
             // Textos do rodapé
-            doc.text('Sistema de Controle de Produção • Relatório por Produto', 40, doc.internal.pageSize.height - 25);
-            doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 100, doc.internal.pageSize.height - 25);
+            doc.text('Sistema de Controle de Produção • Relatório por Produto', 40, pageHeight - 25);
+            doc.text(`Página ${i} de ${pageCount}`, pageWidth - 100, pageHeight - 25);
             
             // Adicionar logo ou identificação da empresa
             if (i === 1) {
                 doc.setFontSize(10);
                 doc.setTextColor(41, 98, 255);
                 doc.setFont('helvetica', 'bold');
-                doc.text('CONTROLE DE PRODUÇÃO E QUALIDADE', doc.internal.pageSize.width / 2, 30, { align: 'center' });
+                const logoText = 'CONTROLE DE PRODUÇÃO E QUALIDADE';
+                const logoWidth = doc.getStringUnitWidth(logoText) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+                const logoX = (pageWidth - logoWidth) / 2;
+                doc.text(logoText, logoX, 30);
             }
         }
         
@@ -2169,7 +2245,7 @@ class SistemaProducao {
         this.mostrarNotificacao('Erro ao gerar PDF. Verifique se todos os dados estão corretos.', 'error');
     }
 }
-    
+
     mostrarModal(mensagem, callbackConfirmar) {
         document.getElementById('modal-message').textContent = mensagem;
         document.getElementById('confirmation-modal').style.display = 'flex';
