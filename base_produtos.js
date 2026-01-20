@@ -118,3 +118,165 @@ const produtosIniciais = [
     {"CÓDIGO": 34096, "PRODUTO": "TORTILLE"}
 ]
 
+
+
+// Adicione esta classe e instância global
+class ProductBase {
+    constructor() {
+        // Tenta carregar produtos salvos, senão usa os iniciais
+        this.loadFromLocalStorage();
+        
+        // Se não houver produtos salvos, inicializa com os produtos iniciais
+        if (this.products.length === 0) {
+            this.products = produtosIniciais.map(prod => ({
+                id: `P${prod["CÓDIGO"]}`,
+                code: prod["CÓDIGO"].toString(),
+                name: prod["PRODUTO"],
+                tara: 0.0,
+                pricePerKg: 0.0,
+                createdAt: new Date().toISOString()
+            }));
+            this.saveToLocalStorage();
+        }
+        
+        this.employees = [
+            { id: "E001", name: "Operador Padrão", position: "Operador", code: "OP001", status: "ativo", createdAt: new Date().toISOString() }
+        ];
+    }
+    
+    loadFromLocalStorage() {
+        try {
+            const saved = localStorage.getItem('productionSystemProducts');
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.products = data.products || [];
+                this.employees = data.employees || [];
+            } else {
+                this.products = [];
+                this.employees = [];
+            }
+        } catch (error) {
+            console.error('Erro ao carregar produtos:', error);
+            this.products = [];
+            this.employees = [];
+        }
+    }
+    
+    saveToLocalStorage() {
+        try {
+            const data = {
+                products: this.products,
+                employees: this.employees
+            };
+            localStorage.setItem('productionSystemProducts', JSON.stringify(data));
+        } catch (error) {
+            console.error('Erro ao salvar produtos:', error);
+        }
+    }
+    
+    // Métodos de gerenciamento (ATUALIZADOS para salvar)
+    addProduct(productData) {
+        const newProduct = {
+            id: `P${Date.now()}`,
+            ...productData,
+            createdAt: new Date().toISOString()
+        };
+        this.products.push(newProduct);
+        this.saveToLocalStorage(); // SALVA
+        return newProduct;
+    }
+    
+    updateProduct(id, productData) {
+        const index = this.products.findIndex(p => p.id === id);
+        if (index !== -1) {
+            // PRESERVA A DATA DE CRIAÇÃO ORIGINAL
+            const originalCreatedAt = this.products[index].createdAt;
+            this.products[index] = { 
+                ...this.products[index], 
+                ...productData,
+                createdAt: originalCreatedAt // ← MANTÉM A DATA
+            };
+            this.saveToLocalStorage(); // SALVA
+            return this.products[index];
+        }
+        return null;
+    }
+    
+    deleteProduct(id) {
+        const index = this.products.findIndex(p => p.id === id);
+        if (index !== -1) {
+            this.products.splice(index, 1);
+            this.saveToLocalStorage(); // SALVA
+            return true;
+        }
+        return false;
+    }
+    
+    addEmployee(employeeData) {
+        const newEmployee = {
+            id: `E${Date.now()}`,
+            ...employeeData,
+            createdAt: new Date().toISOString()
+        };
+        this.employees.push(newEmployee);
+        this.saveToLocalStorage(); // SALVA
+        return newEmployee;
+    }
+    
+    updateEmployee(id, employeeData) {
+        const index = this.employees.findIndex(e => e.id === id);
+        if (index !== -1) {
+            this.employees[index] = { ...this.employees[index], ...employeeData };
+            this.saveToLocalStorage(); // SALVA
+            return this.employees[index];
+        }
+        return null;
+    }
+    
+    deleteEmployee(id) {
+        const index = this.employees.findIndex(e => e.id === id);
+        if (index !== -1) {
+            this.employees.splice(index, 1);
+            this.saveToLocalStorage(); // SALVA
+            return true;
+        }
+        return false;
+    }
+    
+    // Os outros métodos permanecem iguais...
+    searchProduct(query) {
+        const searchTerm = query.toLowerCase();
+        return this.products.filter(p => 
+            p.name.toLowerCase().includes(searchTerm) || 
+            p.code.toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    getProductById(id) {
+        return this.products.find(p => p.id === id);
+    }
+    
+    getProductByCode(code) {
+        return this.products.find(p => p.code === code);
+    }
+    
+    getAllProducts() {
+        return this.products;
+    }
+    
+    getActiveEmployees() {
+        return this.employees.filter(e => e.status === 'ativo');
+    }
+    
+    getEmployeeById(id) {
+        return this.employees.find(e => e.id === id);
+    }
+    
+    getAllEmployees() {
+        return this.employees;
+    }
+}
+
+// Instância global para ser usada em app.js
+const productBase = new ProductBase();
+

@@ -1,2296 +1,3716 @@
-// Sistema de Controle de Pesagem e Remanejamento de Produção - CORRIGIDO
+// app.js - Sistema de Controle de Produção
 
-class SistemaProducao {
-    constructor() {
-        this.produtos = produtosIniciais;
-        this.registros = JSON.parse(localStorage.getItem('producao_registros')) || [];
-        this.produtoSelecionado = null;
-        this.produtosChart = null;
-        this.topProductsChart = null;
-        this.typeDistributionChart = null;
-        this.dailyEvolutionChart = null;
-        this.productionLossChart = null;
-        this.topProductsTodayChart = null;
-        
-        // Produtos especiais para remanejamento
-        this.produtosEspeciais = {
-            'farinha': { codigo: 6613, nome: 'FARINHA DE ROSCA' },
-            'torrada': { codigo: 6781, nome: 'TORRADA SIMPLES' }
-        };
-        
-        // Controle de edição
-        this.editandoRegistroId = null;
-        this.editandoRemanejamentoId = null;
-        
-        this.inicializar();
+// Variáveis globais
+let currentPage = 'dashboard';
+let productionRecords = [];
+let wasteRecords = [];
+let reassignmentRecords = [];
+let currentReassignmentStep = 1;
+let currentReassignmentType = null;
+let currentOriginProduct = null;
+let editingProductId = null;
+let editingEmployeeId = null;
+
+// ===== MOBILE NAVIGATION =====
+
+// Função para inicializar navegação mobile
+function initMobileNavigation() {
+    const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    
+    // Configurar toggle do menu lateral (para tablet)
+    if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', toggleSidebar);
     }
     
-    inicializar() {
-        // Inicializar data e hora
-        this.atualizarDataHora();
-        setInterval(() => this.atualizarDataHora(), 1000);
-        
-        // Configurar eventos
-        this.configurarEventos();
-        
-        // Configurar datas nos filtros
-        this.configurarFiltros();
-        
-        // Atualizar dashboard
-        this.atualizarDashboard();
-        
-        // Inicializar cálculos
-        this.calcularPesoLiquido();
-        this.calcularRemanejamento();
-    }
-    
-    atualizarDataHora() {
-        const now = new Date();
-        document.getElementById('current-date').textContent = 
-            moment(now).locale('pt-br').format('dddd, D [de] MMMM [de] YYYY');
-        document.getElementById('current-time').textContent = 
-            moment(now).locale('pt-br').format('HH:mm:ss');
-    }
-    
-    configurarEventos() {
-        // Navegação entre abas
-        document.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', () => {
-                const tab = button.getAttribute('data-tab');
-                this.mostrarAba(tab);
-            });
-        });
-        
-        // Tipo de pesagem
-        document.querySelectorAll('.type-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const type = btn.getAttribute('data-type');
-                this.mostrarTipoPesagem(type);
-            });
-        });
-        
-        // Pesagem - Busca de produto
-        document.getElementById('product-search').addEventListener('input', (e) => {
-            this.buscarProduto(e.target.value, 'search-results');
-        });
-        
-        // Pesagem - Campos de cálculo
-        document.getElementById('tara').addEventListener('input', () => this.calcularPesoLiquido());
-        document.getElementById('bruto').addEventListener('input', () => this.calcularPesoLiquido());
-        document.getElementById('valor-kg').addEventListener('input', () => this.calcularPesoLiquido());
-        
-        // Pesagem - Limpar formulário
-        document.getElementById('clear-form').addEventListener('click', () => {
-            this.limparFormularioPesagem();
-        });
-        
-        // Pesagem - Registrar
-        document.getElementById('submit-weighing').addEventListener('click', () => {
-            this.registrarPesagemNormal();
-        });
-        
-        // Botão Salvar Edição
-        document.getElementById('save-edit').addEventListener('click', () => {
-            this.salvarEdicao();
-        });
-        
-        // Botão Cancelar Edição
-        document.getElementById('cancel-edit').addEventListener('click', () => {
-            this.cancelarEdicao();
-        });
-        
-        // Remanejamento - Busca de produto
-        document.getElementById('remanejamento-search').addEventListener('input', (e) => {
-            this.buscarProduto(e.target.value, 'remanejamento-results');
-        });
-        
-        // Remanejamento - Passos
-        document.querySelectorAll('.btn-next-step').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const nextStep = btn.getAttribute('data-next');
-                this.proximoPasso(nextStep);
-            });
-        });
-        
-        document.querySelectorAll('.btn-prev-step').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const prevStep = btn.getAttribute('data-prev');
-                this.voltarPasso(prevStep);
-            });
-        });
-        
-        // Remanejamento - Selecionar tipo
-        document.querySelectorAll('.option-card').forEach(card => {
-            card.addEventListener('click', () => {
-                this.selecionarTipoRemanejamento(card);
-            });
-        });
-        
-        // Remanejamento - Campos de cálculo
-        document.getElementById('peso-inicial').addEventListener('input', () => this.calcularRemanejamento());
-        document.getElementById('peso-final').addEventListener('input', () => this.calcularRemanejamento());
-        document.getElementById('valor-origem').addEventListener('input', () => this.calcularRemanejamento());
-        document.getElementById('valor-destino').addEventListener('input', () => this.calcularRemanejamento());
-        
-        // Remanejamento - Registrar
-        document.getElementById('submit-remanejamento').addEventListener('click', () => {
-            this.registrarRemanejamento();
-        });
-        
-        // Registros - Filtros
-        document.getElementById('filter-apply').addEventListener('click', () => {
-            this.aplicarFiltros();
-        });
-        
-        document.getElementById('filter-reset').addEventListener('click', () => {
-            this.resetarFiltros();
-        });
-        
-        document.getElementById('filter-date').addEventListener('change', () => {
-            this.aplicarFiltros();
-        });
-        
-        document.getElementById('filter-type').addEventListener('change', () => {
-            this.aplicarFiltros();
-        });
-        
-        // Filtros avançados para relatórios
-        document.getElementById('filter-product-name').addEventListener('input', () => {
-            this.aplicarFiltrosAvancados();
-        });
-        
-        document.getElementById('filter-product-code').addEventListener('input', () => {
-            this.aplicarFiltrosAvancados();
-        });
-        
-        document.getElementById('filter-tipo-detalhado').addEventListener('change', () => {
-            this.aplicarFiltrosAvancados();
-        });
-        
-        // CORREÇÃO: Configurar o evento do botão Gerar Relatório
-        document.getElementById('apply-advanced-filters').addEventListener('click', () => {
-            this.aplicarFiltrosAvancados();
-        });
-        
-        document.getElementById('reset-advanced-filters').addEventListener('click', () => {
-            this.resetarFiltrosAvancados();
-        });
-        
-        // CORREÇÃO: Configurar o evento do botão Exportar PDF
-        document.getElementById('generate-pdf').addEventListener('click', () => {
-            this.gerarPDF();
-        });
-        
-        // Registros - Limpar todos
-        document.getElementById('clear-records').addEventListener('click', () => {
-            this.confirmarLimparRegistros();
-        });
-        
-        // Relatórios - Gerar
-        // CORREÇÃO: Configurar o evento do botão Gerar Relatório
-        document.getElementById('generate-report').addEventListener('click', () => {
-            this.gerarRelatorio();
-        });
-        
-        // Dashboard - Atualizar
-        document.getElementById('refresh-dashboard').addEventListener('click', () => {
-            this.atualizarDashboard();
-        });
-        
-        // Modal - Cancelar
-        document.getElementById('modal-cancel').addEventListener('click', () => {
-            this.fecharModal();
-        });
-    }
-    
-    configurarFiltros() {
-        const hoje = moment().format('YYYY-MM-DD');
-        document.getElementById('filter-date').value = hoje;
-        document.getElementById('report-start').value = moment().subtract(7, 'days').format('YYYY-MM-DD');
-        document.getElementById('report-end').value = hoje;
-        
-        // Configurar filtros avançados
-        document.getElementById('advanced-start').value = moment().subtract(7, 'days').format('YYYY-MM-DD');
-        document.getElementById('advanced-end').value = hoje;
-    }
-    
-    mostrarAba(abaId) {
-        // Atualizar botões ativos
-        document.querySelectorAll('.tab-button').forEach(button => {
-            button.classList.toggle('active', button.getAttribute('data-tab') === abaId);
-        });
-        
-        // Mostrar conteúdo da aba
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.classList.toggle('active', content.id === abaId);
-        });
-        
-        // Ações específicas por aba
-        switch(abaId) {
-            case 'dashboard':
-                this.atualizarDashboard();
-                break;
-            case 'records':
-                this.aplicarFiltros();
-                break;
-            case 'reports':
-                this.gerarRelatorio();
-                break;
-            case 'remanejamento':
-                this.resetarRemanejamento();
-                break;
-        }
-    }
-    
-    mostrarTipoPesagem(type) {
-        document.querySelectorAll('.type-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.getAttribute('data-type') === type);
-        });
-        
-        if (type === 'rework') {
-            this.mostrarAba('remanejamento');
-        }
-    }
-    
-    buscarProduto(termo, resultsId) {
-        const resultsContainer = document.getElementById(resultsId);
-        
-        if (!termo.trim()) {
-            resultsContainer.style.display = 'none';
-            return;
-        }
-        
-        const termoLower = termo.toLowerCase();
-        const resultados = this.produtos.filter(produto => {
-            return produto.CÓDIGO.toString().includes(termo) ||
-                   produto.PRODUTO.toLowerCase().includes(termoLower);
-        }).slice(0, 10);
-        
-        if (resultados.length === 0) {
-            resultsContainer.innerHTML = '<div class="search-result-item">Nenhum produto encontrado</div>';
-            resultsContainer.style.display = 'block';
-            return;
-        }
-        
-        resultsContainer.innerHTML = resultados.map(produto => `
-            <div class="search-result-item" data-codigo="${produto.CÓDIGO}">
-                <strong>${produto.CÓDIGO}</strong> - ${produto.PRODUTO}
-            </div>
-        `).join('');
-        
-        resultsContainer.style.display = 'block';
-        
-        // Adicionar eventos aos resultados
-        resultsContainer.querySelectorAll('.search-result-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const codigo = parseInt(item.getAttribute('data-codigo'));
-                
-                if (resultsId === 'search-results') {
-                    this.selecionarProdutoNormal(codigo);
-                } else {
-                    this.selecionarProdutoRemanejamento(codigo);
-                }
-                
-                resultsContainer.style.display = 'none';
-            });
-        });
-    }
-    
-    selecionarProdutoNormal(codigo) {
-        this.produtoSelecionado = this.produtos.find(p => p.CÓDIGO === codigo);
-        
-        const container = document.getElementById('selected-product');
-        if (this.produtoSelecionado) {
-            const editando = this.editandoRegistroId ? ' (EDITANDO)' : '';
-            container.innerHTML = `
-                <div class="product-selected-info">
-                    <div class="product-info">
-                        <h3>${this.produtoSelecionado.PRODUTO}${editando}</h3>
-                        <p>${this.editandoRegistroId ? 'Editando registro existente' : 'Produção normal - produto selecionado'}</p>
-                    </div>
-                    <div class="product-code">Código: ${this.produtoSelecionado.CÓDIGO}</div>
-                </div>
-            `;
-            container.classList.add('active');
+    // Configurar itens do menu mobile
+    mobileNavItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const page = item.dataset.page;
             
-            // Definir valor padrão baseado no produto
-            this.definirValorPadrao(this.produtoSelecionado.PRODUTO);
-        }
-    }
-    
-    selecionarProdutoRemanejamento(codigo) {
-        this.produtoRemanejamento = this.produtos.find(p => p.CÓDIGO === codigo);
-        
-        const container = document.getElementById('remanejamento-selected');
-        if (this.produtoRemanejamento) {
-            const editando = this.editandoRemanejamentoId ? ' (EDITANDO)' : '';
-            container.innerHTML = `
-                <div class="product-selected-info">
-                    <div class="product-info">
-                        <h3>${this.produtoRemanejamento.PRODUTO}${editando}</h3>
-                        <p>${this.editandoRemanejamentoId ? 'Editando registro existente' : 'Produto de origem para remanejamento'}</p>
-                    </div>
-                    <div class="product-code">Código: ${this.produtoRemanejamento.CÓDIGO}</div>
-                </div>
-            `;
-            container.classList.add('active');
-            
-            // Atualizar informações do passo 3
-            this.atualizarInfoRemanejamento();
-        }
-    }
-    
-    definirValorPadrao(nomeProduto) {
-        const valoresPadrao = {
-            'PÃO': 12.50,
-            'BOLO': 25.50,
-            'BISCOITO': 18.00,
-            'BOLACHA': 15.00,
-            'TORTA': 35.00,
-            'SALGADO': 28.00,
-            'DOCE': 32.00
-        };
-        
-        let valor = 25.50; // Valor padrão
-        
-        for (const [key, val] of Object.entries(valoresPadrao)) {
-            if (nomeProduto.includes(key)) {
-                valor = val;
-                break;
-            }
-        }
-        
-        document.getElementById('valor-kg').value = valor.toFixed(2);
-        this.calcularPesoLiquido();
-    }
-    
-    calcularPesoLiquido() {
-        const tara = parseFloat(document.getElementById('tara').value) || 0;
-        const bruto = parseFloat(document.getElementById('bruto').value) || 0;
-        const valorKg = parseFloat(document.getElementById('valor-kg').value) || 0;
-        
-        const liquido = Math.max(0, bruto - tara);
-        const valorTotal = liquido * valorKg;
-        
-        document.getElementById('liquido').textContent = liquido.toFixed(3) + ' kg';
-        document.getElementById('valor-total').textContent = 
-            valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        
-        return { liquido, valorTotal };
-    }
-    
-    limparFormularioPesagem() {
-        document.getElementById('product-search').value = '';
-        document.getElementById('selected-product').innerHTML = `
-            <div class="empty-selection">
-                <i class="fas fa-arrow-up"></i>
-                <p>Selecione um produto da lista acima</p>
-            </div>
-        `;
-        document.getElementById('selected-product').classList.remove('active');
-        document.getElementById('tara').value = '0.500';
-        document.getElementById('bruto').value = '5.500';
-        document.getElementById('valor-kg').value = '25.50';
-        document.getElementById('search-results').style.display = 'none';
-        
-        this.produtoSelecionado = null;
-        this.editandoRegistroId = null;
-        
-        // Restaurar botão padrão
-        this.ocultarBotoesEdicao();
-        
-        this.calcularPesoLiquido();
-    }
-    
-    ocultarBotoesEdicao() {
-        document.getElementById('submit-weighing').style.display = 'flex';
-        document.getElementById('save-edit').style.display = 'none';
-        document.getElementById('cancel-edit').style.display = 'none';
-        document.getElementById('clear-form').style.display = 'flex';
-    }
-    
-   mostrarBotoesEdicao() {
-    document.getElementById('submit-weighing').style.display = 'none';
-    document.getElementById('save-edit').style.display = 'flex';
-    document.getElementById('cancel-edit').style.display = 'flex';
-    document.getElementById('clear-form').style.display = 'none';
-    
-    // Adicionar status visual de edição
-    const selectedProduct = document.getElementById('selected-product');
-    if (selectedProduct.querySelector('.product-selected-info')) {
-        const productInfo = selectedProduct.querySelector('.product-info');
-        if (!productInfo.querySelector('.editing-status')) {
-            const statusDiv = document.createElement('div');
-            statusDiv.className = 'editing-status';
-            statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> MODO EDIÇÃO - As alterações serão salvas no registro original';
-            productInfo.appendChild(statusDiv);
-        }
-    }
-}
-    
-    registrarPesagemNormal() {
-        if (!this.produtoSelecionado) {
-            this.mostrarNotificacao('Selecione um produto para registrar a pesagem', 'error');
-            return;
-        }
-        
-        const tara = parseFloat(document.getElementById('tara').value);
-        const bruto = parseFloat(document.getElementById('bruto').value);
-        const valorKg = parseFloat(document.getElementById('valor-kg').value);
-        const { liquido, valorTotal } = this.calcularPesoLiquido();
-        
-        if (liquido <= 0) {
-            this.mostrarNotificacao('O peso líquido deve ser maior que zero', 'error');
-            return;
-        }
-        
-        // CORREÇÃO: Verificar se está editando
-        if (this.editandoRegistroId) {
-            this.salvarEdicao();
-            return;
-        }
-        
-        const registro = {
-            id: Date.now(),
-            data: new Date().toISOString(),
-            tipo: 'normal',
-            produto: this.produtoSelecionado.PRODUTO,
-            codigo: this.produtoSelecionado.CÓDIGO,
-            tara: tara,
-            bruto: bruto,
-            liquido: liquido,
-            valorKg: valorKg,
-            valorTotal: valorTotal,
-            prejuizo: 0,
-            observacoes: 'Produção normal'
-        };
-        
-        this.registros.unshift(registro);
-        this.salvarRegistros();
-        
-        this.mostrarNotificacao(
-            `Produção registrada: ${liquido.toFixed(3)} kg de ${this.produtoSelecionado.PRODUTO}`,
-            'success'
-        );
-        
-        this.limparFormularioPesagem();
-        this.atualizarDashboard();
-        
-        if (document.querySelector('#records.tab-content.active')) {
-            this.aplicarFiltros();
-        }
-    }
-    
-    // CORREÇÃO: Salvar edição de registro (atualiza sem duplicar)
-    salvarEdicao() {
-    if (!this.produtoSelecionado || !this.editandoRegistroId) {
-        this.mostrarNotificacao('Nenhum registro em edição', 'error');
-        return;
-    }
-    
-    const tara = parseFloat(document.getElementById('tara').value);
-    const bruto = parseFloat(document.getElementById('bruto').value);
-    const valorKg = parseFloat(document.getElementById('valor-kg').value);
-    const { liquido, valorTotal } = this.calcularPesoLiquido();
-    
-    if (liquido <= 0) {
-        this.mostrarNotificacao('O peso líquido deve ser maior que zero', 'error');
-        return;
-    }
-    
-    // Encontrar e atualizar o registro existente - SEM DUPLICAR
-    const index = this.registros.findIndex(r => r.id === this.editandoRegistroId);
-    if (index !== -1) {
-        // CORREÇÃO CRÍTICA: Atualizar APENAS o registro existente
-        const registroOriginal = this.registros[index];
-        
-        this.registros[index] = {
-            ...registroOriginal, // Mantém todos os dados originais
-            produto: this.produtoSelecionado.PRODUTO,
-            codigo: this.produtoSelecionado.CÓDIGO,
-            tara: tara,
-            bruto: bruto,
-            liquido: liquido,
-            valorKg: valorKg,
-            valorTotal: valorTotal,
-            dataEditado: new Date().toISOString() // Marca como editado
-        };
-        
-        this.salvarRegistros();
-        
-        this.mostrarNotificacao(
-            `Registro atualizado: ${liquido.toFixed(3)} kg de ${this.produtoSelecionado.PRODUTO}`,
-            'success'
-        );
-        
-        // Limpar e atualizar interfaces
-        this.limparFormularioPesagem();
-        this.atualizarDashboard();
-        
-        if (document.querySelector('#records.tab-content.active')) {
-            this.aplicarFiltros();
-        }
-        
-        // Resetar ID de edição
-        this.editandoRegistroId = null;
-    } else {
-        this.mostrarNotificacao('Registro não encontrado para edição', 'error');
-    }
-}
-    
-    cancelarEdicao() {
-        this.limparFormularioPesagem();
-        this.mostrarNotificacao('Edição cancelada', 'warning');
-    }
-    
-    resetarRemanejamento() {
-        // Resetar passos
-        this.mostrarPasso(1);
-        
-        // Limpar seleções
-        this.produtoRemanejamento = null;
-        this.tipoRemanejamento = null;
-        this.destinoRemanejamento = null;
-        this.editandoRemanejamentoId = null;
-        
-        // Resetar UI
-        document.getElementById('remanejamento-selected').innerHTML = `
-            <div class="empty-selection">
-                <i class="fas fa-box"></i>
-                <p>Selecione um produto para remanejamento</p>
-            </div>
-        `;
-        document.getElementById('remanejamento-selected').classList.remove('active');
-        
-        document.querySelectorAll('.option-card').forEach(card => {
-            card.classList.remove('active');
-        });
-        
-        // Resetar campos
-        document.getElementById('peso-inicial').value = '10.000';
-        document.getElementById('peso-final').value = '8.500';
-        document.getElementById('valor-origem').value = '25.50';
-        document.getElementById('valor-destino').value = '15.00';
-        document.getElementById('observacoes').value = '';
-        
-        // Resetar info
-        document.getElementById('info-origem').textContent = '-';
-        document.getElementById('info-tipo').textContent = '-';
-        document.getElementById('info-destino').textContent = '-';
-        
-        // Resetar botões
-        document.getElementById('submit-remanejamento').style.display = 'flex';
-        document.getElementById('submit-remanejamento').textContent = 'Registrar Remanejamento';
-        
-        // Resetar cálculos
-        this.calcularRemanejamento();
-    }
-    
-    mostrarPasso(numero) {
-        // Atualizar steps
-        document.querySelectorAll('.step').forEach(step => {
-            step.classList.toggle('active', parseInt(step.getAttribute('data-step')) === numero);
-        });
-        
-        // Mostrar conteúdo do passo
-        document.querySelectorAll('.form-step').forEach(step => {
-            step.classList.toggle('active', step.id === `step-${numero}`);
-        });
-    }
-    
-    proximoPasso(passo) {
-        const passoAtual = parseInt(document.querySelector('.form-step.active').id.split('-')[1]);
-        
-        // Validações antes de prosseguir
-        if (passoAtual === 1 && !this.produtoRemanejamento) {
-            this.mostrarNotificacao('Selecione um produto de origem', 'error');
-            return;
-        }
-        
-        if (passoAtual === 2 && !this.tipoRemanejamento) {
-            this.mostrarNotificacao('Selecione um tipo de remanejamento', 'error');
-            return;
-        }
-        
-        this.mostrarPasso(parseInt(passo));
-    }
-    
-    voltarPasso(passo) {
-        this.mostrarPasso(parseInt(passo));
-    }
-    
-    selecionarTipoRemanejamento(card) {
-        document.querySelectorAll('.option-card').forEach(c => {
-            c.classList.remove('active');
-        });
-        
-        card.classList.add('active');
-        
-        this.tipoRemanejamento = card.getAttribute('data-tipo');
-        this.destinoRemanejamento = card.getAttribute('data-destino') || null;
-        
-        // Atualizar informações
-        this.atualizarInfoRemanejamento();
-        
-        // Definir valores padrão baseado no destino
-        this.definirValoresRemanejamento();
-    }
-    
-    atualizarInfoRemanejamento() {
-        if (this.produtoRemanejamento) {
-            document.getElementById('info-origem').textContent = this.produtoRemanejamento.PRODUTO;
-        }
-        
-        if (this.tipoRemanejamento) {
-            const tipoText = this.tipoRemanejamento === 'sobra' ? 'Sobra/Transformação' : 'Perda/Descarte';
-            document.getElementById('info-tipo').textContent = tipoText;
-        }
-        
-        if (this.destinoRemanejamento) {
-            const destinoText = this.destinoRemanejamento === 'farinha' ? 
-                'Farinha de Rosca' : 'Torrada';
-            document.getElementById('info-destino').textContent = destinoText;
-        } else if (this.tipoRemanejamento === 'perda') {
-            document.getElementById('info-destino').textContent = 'Descarte';
-        }
-    }
-    
-    definirValoresRemanejamento() {
-        if (this.tipoRemanejamento === 'perda') {
-            document.getElementById('valor-destino').value = '0.00';
-            document.getElementById('peso-final').value = '0.000';
-        } else if (this.destinoRemanejamento) {
-            // Valores padrão para transformação
-            const valores = {
-                'farinha': 8.50,
-                'torrada': 12.00
-            };
-            
-            if (valores[this.destinoRemanejamento]) {
-                document.getElementById('valor-destino').value = valores[this.destinoRemanejamento].toFixed(2);
-            }
-        }
-        
-        this.calcularRemanejamento();
-    }
-    
-    calcularRemanejamento() {
-        const pesoInicial = parseFloat(document.getElementById('peso-inicial').value) || 0;
-        const pesoFinal = parseFloat(document.getElementById('peso-final').value) || 0;
-        const valorOrigem = parseFloat(document.getElementById('valor-origem').value) || 0;
-        const valorDestino = parseFloat(document.getElementById('valor-destino').value) || 0;
-        
-        const diffPeso = pesoInicial - pesoFinal;
-        const valorInicial = pesoInicial * valorOrigem;
-        const valorFinal = pesoFinal * valorDestino;
-        const prejuizo = valorInicial - valorFinal;
-        
-        // Atualizar displays
-        document.getElementById('diff-peso').textContent = diffPeso.toFixed(3) + ' kg';
-        document.getElementById('valor-inicial').textContent = 
-            valorInicial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        document.getElementById('valor-final').textContent = 
-            valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        document.getElementById('prejuizo').textContent = 
-            prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        
-        return { diffPeso, valorInicial, valorFinal, prejuizo };
-    }
-    
-    registrarRemanejamento() {
-        if (!this.produtoRemanejamento || !this.tipoRemanejamento) {
-            this.mostrarNotificacao('Complete todos os passos do remanejamento', 'error');
-            return;
-        }
-        
-        const pesoInicial = parseFloat(document.getElementById('peso-inicial').value);
-        const pesoFinal = parseFloat(document.getElementById('peso-final').value);
-        const valorOrigem = parseFloat(document.getElementById('valor-origem').value);
-        const valorDestino = parseFloat(document.getElementById('valor-destino').value);
-        const observacoes = document.getElementById('observacoes').value;
-        
-        const { diffPeso, valorInicial, valorFinal, prejuizo } = this.calcularRemanejamento();
-        
-        if (pesoInicial <= 0) {
-            this.mostrarNotificacao('O peso inicial deve ser maior que zero', 'error');
-            return;
-        }
-        
-        // Se estiver editando, atualizar registro existente
-        if (this.editandoRemanejamentoId) {
-            const index = this.registros.findIndex(r => r.id === this.editandoRemanejamentoId);
-            if (index !== -1) {
-                // CORREÇÃO: Manter os dados originais exceto os editados
-                this.registros[index] = {
-                    ...this.registros[index],
-                    tipo: this.tipoRemanejamento,
-                    produto: this.produtoRemanejamento.PRODUTO,
-                    codigo: this.produtoRemanejamento.CÓDIGO,
-                    destino: this.destinoRemanejamento,
-                    pesoInicial: pesoInicial,
-                    pesoFinal: pesoFinal,
-                    diferencaPeso: diffPeso,
-                    valorOrigem: valorOrigem,
-                    valorDestino: valorDestino,
-                    valorInicial: valorInicial,
-                    valorFinal: valorFinal,
-                    prejuizo: Math.max(0, prejuizo),
-                    observacoes: observacoes || `Remanejamento: ${this.tipoRemanejamento === 'sobra' ? 'Transformação para ' + (this.destinoRemanejamento === 'farinha' ? 'Farinha de Rosca' : 'Torrada') : 'Perda/Descarte'}`,
-                    dataEditado: new Date().toISOString() // Adiciona data da edição
-                };
-                
-                this.salvarRegistros();
-                this.mostrarNotificacao('Remanejamento atualizado com sucesso', 'success');
-                this.resetarRemanejamento();
-                this.atualizarDashboard();
-                if (document.querySelector('#records.tab-content.active')) {
-                    this.aplicarFiltros();
-                }
+            // Se for "Mais", mostrar dropdown
+            if (page === 'configuration') {
+                showMobileMoreMenu();
                 return;
             }
+            
+            // Ativar página normal
+            showPage(page);
+            activateMobileNavItem(item);
+        });
+    });
+    
+    // Swipe gestures para navegação
+    initSwipeGestures();
+    
+    // Pull to refresh no dashboard
+    initPullToRefresh();
+}
+
+// Ativar item do menu mobile
+function activateMobileNavItem(selectedItem) {
+    // Remover active de todos
+    document.querySelectorAll('.mobile-nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Adicionar ao selecionado
+    selectedItem.classList.add('active');
+    
+    // Esconder menu "Mais" se aberto
+    hideMobileMoreMenu();
+}
+
+// Mostrar menu "Mais" no mobile
+function showMobileMoreMenu() {
+    // Criar overlay do menu
+    const menuOverlay = document.createElement('div');
+    menuOverlay.className = 'mobile-more-overlay';
+    menuOverlay.innerHTML = `
+        <div class="mobile-more-menu">
+            <div class="more-menu-header">
+                <h3>Mais Opções</h3>
+                <button class="more-menu-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="more-menu-items">
+                <a href="#" class="more-menu-item" data-page="records">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Registros</span>
+                </a>
+                <a href="#" class="more-menu-item" data-page="reports">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Relatórios</span>
+                </a>
+                <a href="#" class="more-menu-item" data-page="configuration">
+                    <i class="fas fa-cogs"></i>
+                    <span>Configurações</span>
+                </a>
+                <hr class="menu-divider">
+                <a href="#" class="more-menu-item" data-action="backup">
+                    <i class="fas fa-download"></i>
+                    <span>Backup</span>
+                </a>
+                <a href="#" class="more-menu-item text-danger" data-action="clear-data">
+                    <i class="fas fa-trash-alt"></i>
+                    <span>Limpar Dados</span>
+                </a>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(menuOverlay);
+    
+    // Animação de entrada
+    setTimeout(() => {
+        menuOverlay.classList.add('active');
+    }, 10);
+    
+    // Configurar eventos
+    const closeBtn = menuOverlay.querySelector('.more-menu-close');
+    closeBtn.addEventListener('click', hideMobileMoreMenu);
+    
+    const menuItems = menuOverlay.querySelectorAll('.more-menu-item');
+    menuItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            const page = item.dataset.page;
+            const action = item.dataset.action;
+            
+            if (page) {
+                showPage(page);
+                activateMobileNavItem(document.querySelector('.mobile-nav-item[data-page="configuration"]'));
+                hideMobileMoreMenu();
+            } else if (action === 'backup') {
+                backupData();
+                hideMobileMoreMenu();
+            } else if (action === 'clear-data') {
+                clearData();
+                hideMobileMoreMenu();
+            }
+        });
+    });
+    
+    // Fechar ao clicar fora
+    menuOverlay.addEventListener('click', (e) => {
+        if (e.target === menuOverlay) {
+            hideMobileMoreMenu();
+        }
+    });
+}
+
+// Esconder menu "Mais"
+function hideMobileMoreMenu() {
+    const overlay = document.querySelector('.mobile-more-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        setTimeout(() => overlay.remove(), 300);
+    }
+}
+
+// Swipe gestures para navegação entre páginas
+function initSwipeGestures() {
+    let startX = 0;
+    let endX = 0;
+    const threshold = 50; // Mínimo de pixels para considerar swipe
+    const content = document.getElementById('content');
+    
+    content.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+    });
+    
+    content.addEventListener('touchend', (e) => {
+        endX = e.changedTouches[0].clientX;
+        handleSwipe();
+    });
+    
+    function handleSwipe() {
+        const diff = startX - endX;
+        
+        if (Math.abs(diff) > threshold) {
+            const pages = ['dashboard', 'weighing', 'waste', 'reassignment', 'records', 'reports', 'configuration'];
+            const currentIndex = pages.indexOf(currentPage);
+            
+            if (diff > 0) {
+                // Swipe left -> próxima página
+                if (currentIndex < pages.length - 1) {
+                    showPage(pages[currentIndex + 1]);
+                }
+            } else {
+                // Swipe right -> página anterior
+                if (currentIndex > 0) {
+                    showPage(pages[currentIndex - 1]);
+                }
+            }
+            
+            // Feedback visual
+            showMobileToast(`Navegando: ${getPageName(currentPage)}`);
+        }
+    }
+}
+
+// Pull to refresh no dashboard
+function initPullToRefresh() {
+    let startY = 0;
+    const dashboardPage = document.getElementById('dashboard-page');
+    
+    if (!dashboardPage) return;
+    
+    dashboardPage.addEventListener('touchstart', (e) => {
+        startY = e.touches[0].clientY;
+    });
+    
+    dashboardPage.addEventListener('touchend', (e) => {
+        const endY = e.changedTouches[0].clientY;
+        const diff = endY - startY;
+        
+        // Pull down (rolar para baixo) mais de 100px
+        if (diff > 100 && window.scrollY === 0) {
+            refreshDashboard();
+        }
+    });
+}
+
+// Refresh dashboard com animação
+function refreshDashboard() {
+    const refreshBtn = document.getElementById('refreshDashboard');
+    if (refreshBtn) {
+        refreshBtn.classList.add('refreshing');
+        
+        // Simular carregamento
+        setTimeout(() => {
+            loadDashboardData();
+            refreshBtn.classList.remove('refreshing');
+            showMobileToast('Dashboard atualizado!');
+        }, 1000);
+    }
+}
+
+// Toast mobile (feedback rápido)
+function showMobileToast(message, duration = 3000) {
+    const toast = document.getElementById('mobileToast');
+    if (!toast) return;
+    
+    toast.textContent = message;
+    toast.style.display = 'block';
+    
+    // Animação de entrada
+    setTimeout(() => toast.style.opacity = '1', 10);
+    
+    // Remover após duração
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.style.display = 'none', 300);
+    }, duration);
+}
+
+// Obter nome amigável da página
+function getPageName(page) {
+    const names = {
+        'dashboard': 'Painel',
+        'weighing': 'Pesagem',
+        'waste': 'Sobras/Perdas',
+        'reassignment': 'Remanejamento',
+        'records': 'Registros',
+        'reports': 'Relatórios',
+        'configuration': 'Configurações'
+    };
+    return names[page] || page;
+}
+
+// Atualizar showPage para mobile
+const originalShowPage = showPage;
+showPage = function(pageName) {
+    originalShowPage(pageName);
+    
+    // Atualizar menu mobile
+    const mobileItem = document.querySelector(`.mobile-nav-item[data-page="${pageName}"]`);
+    if (mobileItem) {
+        activateMobileNavItem(mobileItem);
+    }
+    
+    // Scroll para topo em mobile
+    if (window.innerWidth <= 768) {
+        window.scrollTo(0, 0);
+    }
+    
+    // Feedback tátil (vibração se suportado)
+    if (navigator.vibrate) {
+        navigator.vibrate(50);
+    }
+};
+
+// ===== ESTILOS DINÂMICOS PARA MENU MOBILE =====
+const mobileStyles = document.createElement('style');
+mobileStyles.textContent = `
+    /* Menu "Mais" overlay */
+    .mobile-more-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        display: flex;
+        align-items: flex-end;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .mobile-more-overlay.active {
+        opacity: 1;
+    }
+    
+    .mobile-more-menu {
+        background: white;
+        border-radius: 20px 20px 0 0;
+        width: 100%;
+        max-height: 70vh;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    
+    .mobile-more-overlay.active .mobile-more-menu {
+        transform: translateY(0);
+    }
+    
+    .more-menu-header {
+        padding: 1.5rem 1rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .more-menu-header h3 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0;
+    }
+    
+    .more-menu-close {
+        background: none;
+        border: none;
+        font-size: 1.25rem;
+        color: var(--gray);
+        padding: 0.5rem;
+    }
+    
+    .more-menu-items {
+        padding: 1rem 0;
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+    
+    .more-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        text-decoration: none;
+        color: var(--dark-color);
+        transition: background 0.2s ease;
+    }
+    
+    .more-menu-item:hover,
+    .more-menu-item:active {
+        background: var(--light-color);
+    }
+    
+    .more-menu-item i {
+        width: 20px;
+        text-align: center;
+        color: var(--gray);
+    }
+    
+    .more-menu-item.text-danger {
+        color: var(--danger-color);
+    }
+    
+    .more-menu-item.text-danger i {
+        color: var(--danger-color);
+    }
+    
+    .menu-divider {
+        margin: 0.5rem 1.5rem;
+        border: none;
+        border-top: 1px solid var(--border-color);
+    }
+    
+    /* Botão de refresh animado */
+    .btn.refreshing {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .btn.refreshing::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        animation: refreshing 1s infinite;
+    }
+    
+    @keyframes refreshing {
+        to { left: 100%; }
+    }
+    
+    /* Badge para notificações no menu */
+    .mobile-nav-item .badge {
+        position: absolute;
+        top: 5px;
+        right: 10px;
+        background: var(--danger-color);
+        color: white;
+        font-size: 0.6rem;
+        padding: 0.1rem 0.3rem;
+        border-radius: 10px;
+        min-width: 16px;
+        text-align: center;
+    }
+    
+    /* Status bar para mobile */
+    .mobile-status-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        background: var(--primary-color);
+        color: white;
+        font-size: 0.8rem;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1001;
+        height: 30px;
+    }
+    
+    /* Offline indicator */
+    .offline-indicator {
+        background: var(--danger-color);
+        color: white;
+        padding: 0.5rem;
+        text-align: center;
+        font-size: 0.8rem;
+        position: fixed;
+        top: 60px;
+        left: 0;
+        right: 0;
+        z-index: 999;
+        animation: slideDown 0.3s ease;
+    }
+    
+    @keyframes slideDown {
+        from { transform: translateY(-100%); }
+        to { transform: translateY(0); }
+    }
+`;
+document.head.appendChild(mobileStyles);
+
+// ===== INICIALIZAÇÃO MOBILE =====
+// Modifique o DOMContentLoaded para incluir mobile
+document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
+    setupEventListeners();
+    initMobileNavigation(); // ← NOVO
+    updateDateTime();
+    loadDashboardData();
+    loadEmployees();
+    loadProductsTable();
+    loadRecords();
+    loadWasteRecords();
+    
+    // Detectar orientação
+    detectOrientation();
+    initMobileNavigation(); // ← ADICIONE AQUI
+    detectOrientation();    // ← ADICIONE AQUI
+});
+
+// Detectar mudança de orientação
+function detectOrientation() {
+    const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+    
+    if (!isPortrait && window.innerWidth <= 768) {
+        // Modo paisagem no mobile
+        document.body.classList.add('landscape-mode');
+    } else {
+        document.body.classList.remove('landscape-mode');
+    }
+}
+
+window.addEventListener('orientationchange', detectOrientation);
+window.addEventListener('resize', detectOrientation);
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
+    setupEventListeners();
+    updateDateTime();
+    loadDashboardData();
+    loadEmployees();
+    loadProductsTable();
+    loadRecords();
+    loadWasteRecords();
+});
+
+// Funções de Inicialização
+function initializeApp() {
+    // Carregar dados do localStorage
+    loadFromLocalStorage();
+    
+    // Atualizar data e hora continuamente
+    setInterval(updateDateTime, 1000);
+    
+    // Mostrar página inicial
+    showPage('dashboard');
+}
+
+// Função para carregar do localStorage (MODIFICADA)
+function loadFromLocalStorage() {
+    try {
+        const savedProduction = localStorage.getItem('productionRecords');
+        const savedWaste = localStorage.getItem('wasteRecords');
+        const savedReassignment = localStorage.getItem('reassignmentRecords');
+        
+        // ADICIONADO: Carregar colaboradores e produtos
+        const savedBaseData = localStorage.getItem('productBaseData');
+        
+        if (savedProduction) productionRecords = JSON.parse(savedProduction);
+        if (savedWaste) wasteRecords = JSON.parse(savedWaste);
+        if (savedReassignment) reassignmentRecords = JSON.parse(savedReassignment);
+        
+        // ADICIONADO: Restaurar colaboradores e produtos
+        if (savedBaseData) {
+            const baseData = JSON.parse(savedBaseData);
+            
+            // Restaurar produtos
+            if (baseData.products && Array.isArray(baseData.products)) {
+                // Limpar produtos existentes
+                productBase.products = [];
+                
+                // Adicionar produtos salvos
+                baseData.products.forEach(product => {
+                    productBase.products.push(product);
+                });
+            }
+            
+            // Restaurar colaboradores
+            if (baseData.employees && Array.isArray(baseData.employees)) {
+                // Limpar colaboradores existentes
+                productBase.employees = [];
+                
+                // Adicionar colaboradores salvos
+                baseData.employees.forEach(employee => {
+                    productBase.employees.push(employee);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar dados do localStorage:', error);
+        productionRecords = [];
+        wasteRecords = [];
+        reassignmentRecords = [];
+    }
+}
+
+// Função para salvar no localStorage (MODIFICADA)
+function saveToLocalStorage() {
+    try {
+        localStorage.setItem('productionRecords', JSON.stringify(productionRecords));
+        localStorage.setItem('wasteRecords', JSON.stringify(wasteRecords));
+        localStorage.setItem('reassignmentRecords', JSON.stringify(reassignmentRecords));
+        
+        // ADICIONADO: Salvar colaboradores e produtos
+        const baseData = {
+            products: productBase.getAllProducts(),
+            employees: productBase.getAllEmployees()
+        };
+        localStorage.setItem('productBaseData', JSON.stringify(baseData));
+        
+    } catch (error) {
+        console.error('Erro ao salvar dados no localStorage:', error);
+        showNotification('Erro ao salvar dados', 'error');
+    }
+}
+
+// Configuração de Event Listeners
+function setupEventListeners() {
+    // Menu lateral
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const page = item.dataset.page;
+            showPage(page);
+        });
+    });
+    
+    // Sidebar toggle (mobile)
+    document.getElementById('sidebarToggle').addEventListener('click', toggleSidebar);
+    
+    // Botões do dashboard
+    document.getElementById('refreshDashboard').addEventListener('click', loadDashboardData);
+    document.getElementById('newProduction').addEventListener('click', () => showPage('weighing'));
+    
+    // Pesagem
+    document.getElementById('product-search').addEventListener('input', handleProductSearch);
+    document.getElementById('gross-weight').addEventListener('input', calculateWeighing);
+    document.getElementById('clear-weighing').addEventListener('click', clearWeighingForm);
+    document.getElementById('register-weighing').addEventListener('click', registerWeighing);
+    
+    document.getElementById('product-search').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const searchTerm = this.value.trim();
+            if (searchTerm) {
+                // Buscar produto pelo código exato
+                const product = productBase.getProductByCode(searchTerm);
+                if (product) {
+                    selectProduct(product);
+                    document.getElementById('search-results').innerHTML = '';
+                } else {
+                    // Se não encontrar pelo código exato, tentar pela busca normal
+                    handleProductSearch();
+                }
+            }
+        }
+    });
+
+    
+    // Sobras/Perdas
+    document.getElementById('waste-product-search').addEventListener('input', handleWasteProductSearch);
+    document.getElementById('new-waste').addEventListener('click', showWasteForm);
+    document.getElementById('register-waste').addEventListener('click', registerWaste);
+    document.getElementById('cancel-waste').addEventListener('click', clearWasteForm);
+    
+    // Remanejamento
+    document.getElementById('reassignment-product-search').addEventListener('input', handleReassignmentSearch);
+    document.querySelectorAll('.type-option').forEach(option => {
+        option.addEventListener('click', () => selectReassignmentType(option.dataset.type));
+    });
+    document.getElementById('initial-weight').addEventListener('input', calculateReassignment);
+    document.getElementById('final-weight').addEventListener('input', calculateReassignment);
+    document.getElementById('destination-price').addEventListener('input', calculateReassignment);
+    document.getElementById('prev-step').addEventListener('click', prevReassignmentStep);
+    document.getElementById('next-step').addEventListener('click', nextReassignmentStep);
+    document.getElementById('register-reassignment').addEventListener('click', registerReassignment);
+    
+    // Registros
+    document.getElementById('apply-filters').addEventListener('click', applyRecordFilters);
+    document.getElementById('clear-filters').addEventListener('click', clearRecordFilters);
+    
+    // Relatórios
+    document.getElementById('apply-report-filters').addEventListener('click', applyReportFilters);
+    document.getElementById('clear-report-filters').addEventListener('click', clearReportFilters);
+    document.getElementById('export-pdf').addEventListener('click', exportToPDF);
+    document.getElementById('export-excel').addEventListener('click', exportToExcel);
+    
+    // Configurações
+    document.getElementById('new-product').addEventListener('click', showProductModal);
+    document.getElementById('new-employee').addEventListener('click', showEmployeeModal);
+    document.getElementById('config-product-search').addEventListener('input', filterProductsTable);
+    document.getElementById('save-product').addEventListener('click', saveProduct);
+    document.getElementById('save-employee').addEventListener('click', saveEmployee);
+    document.getElementById('cancel-product').addEventListener('click', closeProductModal);
+    document.getElementById('cancel-employee').addEventListener('click', closeEmployeeModal);
+    document.getElementById('close-product-modal').addEventListener('click', closeProductModal);
+    document.getElementById('close-employee-modal').addEventListener('click', closeEmployeeModal);
+    document.getElementById('backup-data').addEventListener('click', backupData);
+    document.getElementById('export-data').addEventListener('click', exportData);
+    document.getElementById('import-data').addEventListener('click', importData);
+    document.getElementById('clear-data').addEventListener('click', clearData);
+    
+    // Modais
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeAllModals();
+            }
+        });
+    });
+    
+    // Fechar modais com ESC
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeAllModals();
+    });
+}
+
+// Adicionar estilos CSS para a nova interface de sobras
+const reassignmentStyles = document.createElement('style');
+reassignmentStyles.textContent = `
+    .interactive-section {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .section-header {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .section-header h4 {
+        margin: 0 0 5px 0;
+        color: #334155;
+        font-size: 14px;
+    }
+    
+    .section-header p {
+        margin: 0;
+        color: #64748b;
+        font-size: 12px;
+    }
+    
+    .product-waste-section {
+        background: white;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 10px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .product-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    
+    .product-header strong {
+        color: #1e293b;
+        font-size: 14px;
+    }
+    
+    .product-code, .waste-total {
+        font-size: 12px;
+        color: #64748b;
+        background: #f1f5f9;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    
+    .waste-details {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .waste-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        background: #f8fafc;
+        border-radius: 4px;
+        border-left: 3px solid #3b82f6;
+    }
+    
+    .waste-info {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 5px;
+        flex-grow: 1;
+    }
+    
+    .waste-periodo, .waste-quantity, .waste-value, .waste-motivo {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+    }
+    
+    .waste-periodo i, .waste-quantity i, .waste-value i, .waste-motivo i {
+        color: #64748b;
+        font-size: 10px;
+    }
+    
+    .btn-select {
+        background: #10b981;
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    
+    .btn-select:hover {
+        background: #059669;
+    }
+    
+    .waste-indicator {
+        color: #10b981;
+        font-size: 11px;
+        margin-top: 3px;
+    }
+    
+    .selected-waste-info {
+        background: #f0f9ff;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 10px;
+        border: 1px solid #bae6fd;
+    }
+    
+    .selected-waste-info .waste-details {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 12px;
+    }
+    
+    .selected-waste-info strong {
+        color: #0369a1;
+        display: block;
+        margin-bottom: 5px;
+    }
+`;
+document.head.appendChild(reassignmentStyles);
+
+// Funções de UI
+function showPage(pageName) {
+    // Esconder todas as páginas
+    document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+    });
+    
+    // Remover active de todos os itens do menu
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Mostrar página selecionada
+    const pageElement = document.getElementById(`${pageName}-page`);
+    if (pageElement) {
+        pageElement.classList.add('active');
+    }
+    
+    // Ativar item do menu correspondente
+    const menuItem = document.querySelector(`.menu-item[data-page="${pageName}"]`);
+    if (menuItem) {
+        menuItem.classList.add('active');
+    }
+    
+    // Atualizar conteúdo específico da página
+    switch(pageName) {
+        case 'dashboard':
+            loadDashboardData();
+            break;
+        case 'weighing':
+            clearWeighingForm();
+            loadEmployees();
+            break;
+        case 'waste':
+            loadWasteRecords();
+            break;
+        case 'reassignment':
+            resetReassignment();
+            break;
+        case 'records':
+            loadRecords();
+            break;
+        case 'reports':
+            loadReports();
+            break;
+        case 'configuration':
+            loadProductsTable();
+            loadEmployeesTable();
+            break;
+    }
+    
+    currentPage = pageName;
+    
+    // Fechar sidebar no mobile
+    if (window.innerWidth <= 768) {
+        document.querySelector('.sidebar').classList.remove('active');
+    }
+}
+
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    sidebar.classList.toggle('active');
+}
+
+function updateDateTime() {
+    const now = new Date();
+    
+    // Formatar data
+    const dateOptions = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    const formattedDate = now.toLocaleDateString('pt-BR', dateOptions);
+    
+    // Formatar hora
+    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const formattedTime = now.toLocaleTimeString('pt-BR', timeOptions);
+    
+    // Atualizar elementos
+    document.getElementById('current-date').textContent = formattedDate;
+    document.getElementById('current-time').textContent = formattedTime;
+}
+
+function showNotification(message, type = 'info', duration = 5000) {
+    const notifications = document.getElementById('notifications');
+    
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    let icon = 'info-circle';
+    if (type === 'success') icon = 'check-circle';
+    if (type === 'error') icon = 'exclamation-circle';
+    if (type === 'warning') icon = 'exclamation-triangle';
+    
+    notification.innerHTML = `
+        <i class="fas fa-${icon} notification-icon"></i>
+        <div class="notification-content">
+            <div class="notification-title">${type === 'error' ? 'Erro' : type === 'success' ? 'Sucesso' : 'Informação'}</div>
+            <div class="notification-message">${message}</div>
+        </div>
+        <button class="notification-close">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    notifications.appendChild(notification);
+    
+    // Fechar notificação
+    const closeBtn = notification.querySelector('.notification-close');
+    closeBtn.addEventListener('click', () => {
+        notification.style.animation = 'slideIn 0.3s ease reverse';
+        setTimeout(() => notification.remove(), 300);
+    });
+    
+    // Remover automaticamente após duração
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.animation = 'slideIn 0.3s ease reverse';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, duration);
+}
+
+// Funções do Dashboard
+function loadDashboardData() {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Filtrar registros de hoje
+    const todayProduction = productionRecords.filter(record => 
+        record.date.startsWith(today)
+    );
+    
+    const todayWaste = wasteRecords.filter(record => 
+        record.date.startsWith(today)
+    );
+    
+    // Calcular totais
+    const totalWeight = todayProduction.reduce((sum, record) => sum + record.netWeight, 0);
+    const totalValue = todayProduction.reduce((sum, record) => sum + record.totalValue, 0);
+    const totalWasteWeight = todayWaste.reduce((sum, record) => sum + record.quantity, 0);
+    const totalWasteValue = todayWaste.reduce((sum, record) => sum + (record.quantity * record.pricePerKg), 0);
+    
+    // Atualizar cards
+    document.getElementById('today-production').textContent = `${totalWeight.toFixed(3)} kg`;
+    document.getElementById('today-value').textContent = `R$ ${totalValue.toFixed(2)}`;
+    document.getElementById('items-produced').textContent = todayProduction.length;
+    
+    // Contar tipos únicos de produtos
+    const uniqueProducts = [...new Set(todayProduction.map(p => p.productName))];
+    document.getElementById('products-types').textContent = `${uniqueProducts.length} tipos`;
+    
+    // Produto mais produzido
+    const productCounts = {};
+    todayProduction.forEach(record => {
+        productCounts[record.productName] = (productCounts[record.productName] || 0) + record.netWeight;
+    });
+    
+    const topProduct = Object.entries(productCounts).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById('top-product').textContent = topProduct ? topProduct[0] : '-';
+    
+    // Perdas
+    document.getElementById('today-waste').textContent = `${totalWasteWeight.toFixed(3)} kg`;
+    document.getElementById('waste-value').textContent = `R$ ${totalWasteValue.toFixed(2)}`;
+    
+    // Última pesagem
+    if (todayProduction.length > 0) {
+        const lastRecord = todayProduction[todayProduction.length - 1];
+        const time = lastRecord.time.split(':').slice(0, 2).join(':');
+        document.getElementById('last-weighing-time').textContent = time;
+        document.getElementById('last-weighing-product').textContent = lastRecord.productName;
+        document.getElementById('weighing-status').textContent = 'Registrado';
+    } else {
+        document.getElementById('last-weighing-time').textContent = '--:--';
+        document.getElementById('last-weighing-product').textContent = 'Nenhuma ainda';
+        document.getElementById('weighing-status').textContent = 'Sem registros';
+    }
+    
+    // Atualizar comparações (simplificado)
+    document.getElementById('production-comparison').textContent = '0%';
+    document.getElementById('waste-comparison').textContent = '0%';
+    
+    // Atualizar tabela de atividade recente
+    updateRecentActivityTable(todayProduction.slice(-5).reverse());
+}
+
+function updateRecentActivityTable(activities) {
+    const tbody = document.getElementById('recent-activity');
+    tbody.innerHTML = '';
+    
+    if (activities.length === 0) {
+        tbody.innerHTML = `
+            <tr class="no-data-row">
+                <td colspan="5">Nenhuma atividade registrada hoje</td>
+            </tr>
+        `;
+        return;
+    }
+    
+    activities.forEach(activity => {
+        const time = activity.time.split(':').slice(0, 2).join(':');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${time}</td>
+            <td><span class="badge badge-production">Produção</span></td>
+            <td>${activity.productName}</td>
+            <td>${activity.netWeight.toFixed(3)} kg</td>
+            <td>R$ ${activity.totalValue.toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Funções de Pesagem
+function handleProductSearch() {
+    const searchTerm = document.getElementById('product-search').value.toLowerCase();
+    const resultsContainer = document.getElementById('search-results');
+    
+    // CORREÇÃO: Permitir busca mesmo com 1 caractere (para códigos)
+    // Verificar se é apenas um número (código)
+    const isNumericCode = /^\d+$/.test(searchTerm);
+    
+    if (searchTerm.length === 0) {
+        resultsContainer.innerHTML = '';
+        return;
+    }
+    
+    // CORREÇÃO: Se for um código numérico, buscar mesmo com 1 caractere
+    // Se for texto, manter o mínimo de 2 caracteres
+    if (!isNumericCode && searchTerm.length < 2) {
+        resultsContainer.innerHTML = '';
+        return;
+    }
+    
+    const products = productBase.searchProduct(searchTerm);
+    resultsContainer.innerHTML = '';
+    
+    if (products.length === 0) {
+        resultsContainer.innerHTML = '<div class="search-result-item">Nenhum produto encontrado</div>';
+        return;
+    }
+    
+    products.slice(0, 10).forEach(product => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        item.innerHTML = `
+            <div class="product-name">${product.name}</div>
+            <div class="product-code">Código: ${product.code}</div>
+        `;
+        
+        item.addEventListener('click', () => {
+            selectProduct(product);
+            resultsContainer.innerHTML = '';
+        });
+        
+        resultsContainer.appendChild(item);
+    });
+}
+
+function selectProduct(product) {
+    document.getElementById('product-search').value = product.name;
+    
+    // Mostrar card do produto selecionado
+    const card = document.getElementById('selected-product-card');
+    card.style.display = 'block';
+    
+    // Preencher informações do produto
+    document.getElementById('selected-code').textContent = product.code;
+    document.getElementById('selected-name').textContent = product.name;
+    document.getElementById('selected-tara').textContent = product.tara ? product.tara.toFixed(3) : '0.000';
+    document.getElementById('selected-price').textContent = product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00';
+    
+    // Atualizar valores na pesagem
+    document.getElementById('tara-display').textContent = product.tara ? product.tara.toFixed(3) : '0.000';
+    document.getElementById('price-per-kg').textContent = product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00';
+    
+    // Calcular novamente se já houver peso bruto
+    const grossWeight = parseFloat(document.getElementById('gross-weight').value) || 0;
+    if (grossWeight > 0) {
+        calculateWeighing();
+    }
+}
+
+function calculateWeighing() {
+    const tara = parseFloat(document.getElementById('tara-display').textContent) || 0;
+    const grossWeight = parseFloat(document.getElementById('gross-weight').value) || 0;
+    const pricePerKg = parseFloat(document.getElementById('price-per-kg').textContent) || 0;
+    
+    // Calcular peso líquido
+    const netWeight = Math.max(0, grossWeight - tara);
+    document.getElementById('net-weight').textContent = netWeight.toFixed(3);
+    
+    // Calcular valor total
+    const totalValue = netWeight * pricePerKg;
+    document.getElementById('total-value').textContent = totalValue.toFixed(2);
+}
+
+function clearWeighingForm() {
+    document.getElementById('product-search').value = '';
+    document.getElementById('selected-product-card').style.display = 'none';
+    document.getElementById('employee-select').selectedIndex = 0;
+    document.getElementById('gross-weight').value = '';
+    document.getElementById('observations').value = '';
+    
+    // Resetar valores calculados
+    document.getElementById('tara-display').textContent = '0.000';
+    document.getElementById('net-weight').textContent = '0.000';
+    document.getElementById('price-per-kg').textContent = '0.00';
+    document.getElementById('total-value').textContent = '0.00';
+}
+
+function registerWeighing() {
+    // Validar dados
+    const productName = document.getElementById('selected-name').textContent;
+    if (productName === '-') {
+        showNotification('Selecione um produto primeiro', 'error');
+        return;
+    }
+    
+    const employeeId = document.getElementById('employee-select').value;
+    if (!employeeId) {
+        showNotification('Selecione um colaborador', 'error');
+        return;
+    }
+    
+    const grossWeight = parseFloat(document.getElementById('gross-weight').value);
+    if (!grossWeight || grossWeight <= 0) {
+        showNotification('Informe o peso bruto', 'error');
+        return;
+    }
+    
+    // Coletar dados
+    const now = new Date();
+    const record = {
+        id: `PROD${Date.now()}`,
+        type: 'production',
+        productCode: document.getElementById('selected-code').textContent,
+        productName: productName,
+        employeeId: employeeId,
+        employeeName: document.getElementById('employee-select').selectedOptions[0].text,
+        tara: parseFloat(document.getElementById('tara-display').textContent),
+        grossWeight: grossWeight,
+        netWeight: parseFloat(document.getElementById('net-weight').textContent),
+        pricePerKg: parseFloat(document.getElementById('price-per-kg').textContent),
+        totalValue: parseFloat(document.getElementById('total-value').textContent),
+        observations: document.getElementById('observations').value,
+        date: now.toISOString().split('T')[0],
+        time: now.toTimeString().split(' ')[0],
+        timestamp: now.getTime()
+    };
+    
+    // Adicionar ao array
+    productionRecords.push(record);
+    
+    // Salvar no localStorage
+    saveToLocalStorage();
+    
+    // Limpar formulário
+    clearWeighingForm();
+    
+    // Mostrar notificação
+    showNotification('Pesagem registrada com sucesso!', 'success');
+    
+    // Atualizar dashboard
+    loadDashboardData();
+}
+
+// Funções de Colaboradores
+function loadEmployees() {
+    const select = document.getElementById('employee-select');
+    const activeEmployees = productBase.getActiveEmployees();
+    
+    select.innerHTML = '<option value="">Selecione um colaborador</option>';
+    
+    activeEmployees.forEach(employee => {
+        const option = document.createElement('option');
+        option.value = employee.id;
+        option.textContent = `${employee.name} - ${employee.position}`;
+        select.appendChild(option);
+    });
+}
+
+// Funções de Sobras/Perdas
+function handleWasteProductSearch() {
+    const searchTerm = document.getElementById('waste-product-search').value.trim().toLowerCase();
+    const selectedProduct = document.getElementById('selected-waste-product');
+    const periodoContainer = document.getElementById('periodo-select-container');
+    
+    // Verificar se o container do período existe, se não, criar
+    if (!periodoContainer) {
+        const form = document.querySelector('.waste-form');
+        const periodoHtml = `
+            <div class="form-group" id="periodo-select-container" style="display: none;">
+                <label for="waste-periodo-select">
+                    <i class="fas fa-calendar-alt"></i>
+                    Período de Produção
+                </label>
+                <select id="waste-periodo-select">
+                    <option value="">Selecione o período</option>
+                </select>
+            </div>
+        `;
+        const productSearchElement = document.getElementById('waste-product-search').closest('.form-group');
+        productSearchElement.insertAdjacentHTML('afterend', periodoHtml);
+    }
+    
+    if (searchTerm.length === 0) {
+        selectedProduct.style.display = 'none';
+        if (periodoContainer) periodoContainer.style.display = 'none';
+        
+        // Limpar select de períodos
+        const periodoSelect = document.getElementById('waste-periodo-select');
+        if (periodoSelect) {
+            periodoSelect.innerHTML = '<option value="">Selecione o período</option>';
         }
         
-        // Criar novo registro de remanejamento
-        const registro = {
-            id: Date.now(),
-            data: new Date().toISOString(),
-            tipo: this.tipoRemanejamento,
-            produto: this.produtoRemanejamento.PRODUTO,
-            codigo: this.produtoRemanejamento.CÓDIGO,
-            destino: this.destinoRemanejamento,
-            pesoInicial: pesoInicial,
-            pesoFinal: pesoFinal,
-            diferencaPeso: diffPeso,
-            valorOrigem: valorOrigem,
-            valorDestino: valorDestino,
-            valorInicial: valorInicial,
-            valorFinal: valorFinal,
-            prejuizo: Math.max(0, prejuizo),
-            observacoes: observacoes || `Remanejamento: ${this.tipoRemanejamento === 'sobra' ? 'Transformação para ' + (this.destinoRemanejamento === 'farinha' ? 'Farinha de Rosca' : 'Torrada') : 'Perda/Descarte'}`
+        // Remover campo de motivo se existir
+        const motivoField = document.getElementById('waste-motivo-container');
+        if (motivoField) {
+            motivoField.remove();
+        }
+        
+        return;
+    }
+    
+    // Verificar se é apenas número (código)
+    const isNumericCode = /^\d+$/.test(searchTerm);
+    
+    // Para códigos, buscar exato mesmo com 1 caractere
+    // Para nomes, mínimo de 2 caracteres
+    if (!isNumericCode && searchTerm.length < 2) {
+        selectedProduct.style.display = 'none';
+        if (periodoContainer) periodoContainer.style.display = 'none';
+        return;
+    }
+    
+    let products = [];
+    if (isNumericCode) {
+        // Buscar por código exato
+        const product = productBase.getProductByCode(searchTerm);
+        if (product) products = [product];
+    } else {
+        // Buscar por nome
+        products = productBase.searchProduct(searchTerm);
+    }
+    
+    if (products.length > 0) {
+        const product = products[0];
+        selectedProduct.style.display = 'block';
+        
+        // Atualizar nome do produto
+        document.getElementById('waste-product-name').textContent = product.name;
+        
+        // Armazenar dados do produto no elemento para uso posterior
+        document.getElementById('selected-waste-product').dataset.code = product.code;
+        document.getElementById('selected-waste-product').dataset.price = product.pricePerKg || 0;
+        
+        // CORREÇÃO: Agrupar produção por data (NÃO ACUMULAR entre datas diferentes)
+        const producoesPorData = {};
+        
+        // Filtrar produções deste produto
+        productionRecords
+            .filter(p => p.productCode === product.code)
+            .forEach(record => {
+                const data = record.date;
+                
+                // Inicializar registro para esta data se não existir
+                if (!producoesPorData[data]) {
+                    producoesPorData[data] = {
+                        total: 0,
+                        registros: [],
+                        jaTemFechamento: false,
+                        sobrasRegistradas: 0,
+                        perdasRegistradas: 0
+                    };
+                }
+                
+                // Somar produção deste registro
+                producoesPorData[data].total += record.netWeight;
+                producoesPorData[data].registros.push(record);
+            });
+        
+        // Verificar se há registros de fechamento para cada data
+        wasteRecords
+            .filter(w => w.productCode === product.code && w.motivo === 'fechamento')
+            .forEach(waste => {
+                if (producoesPorData[waste.periodoId]) {
+                    producoesPorData[waste.periodoId].jaTemFechamento = true;
+                }
+            });
+        
+        // Calcular sobras/perdas já registradas por período
+        wasteRecords
+            .filter(w => w.productCode === product.code)
+            .forEach(waste => {
+                if (producoesPorData[waste.periodoId]) {
+                    if (waste.type === 'sobra') {
+                        producoesPorData[waste.periodoId].sobrasRegistradas += waste.quantity;
+                    } else if (waste.type === 'perda') {
+                        producoesPorData[waste.periodoId].perdasRegistradas += waste.quantity;
+                    }
+                }
+            });
+        
+        // Calcular sobras disponíveis por período (produção - sobras registradas)
+        Object.keys(producoesPorData).forEach(data => {
+            const periodo = producoesPorData[data];
+            periodo.sobrasDisponiveis = periodo.total - periodo.sobrasRegistradas;
+        });
+        
+        // Limpar select de períodos
+        const periodoSelect = document.getElementById('waste-periodo-select');
+        periodoSelect.innerHTML = '<option value="">Selecione o período</option>';
+        
+        // Adicionar opções para cada data
+        Object.keys(producoesPorData).sort().reverse().forEach(data => {
+            const periodo = producoesPorData[data];
+            
+            // Formatar data para exibição
+            const dataObj = new Date(data + 'T00:00:00');
+            const dataFormatada = dataObj.toLocaleDateString('pt-BR');
+            
+            const option = document.createElement('option');
+            option.value = data;
+            
+            // Criar texto descritivo do período
+            let status = '';
+            if (periodo.jaTemFechamento) {
+                status = ' [FECHADO]';
+            } else if (periodo.sobrasRegistradas > 0) {
+                status = ' [SOBRAS REGISTRADAS]';
+            }
+            
+            option.textContent = `${dataFormatada} - ${periodo.total.toFixed(3)} kg (${periodo.registros.length} pesagens)${status}`;
+            option.dataset.producaoTotal = periodo.total;
+            option.dataset.sobrasDisponiveis = periodo.sobrasDisponiveis;
+            option.dataset.jaTemFechamento = periodo.jaTemFechamento;
+            
+            // Desabilitar opção se já tiver fechamento
+            if (periodo.jaTemFechamento) {
+                option.disabled = true;
+            }
+            
+            periodoSelect.appendChild(option);
+        });
+        
+        // Mostrar select de período
+        document.getElementById('periodo-select-container').style.display = 'block';
+        
+        // Adicionar evento para atualizar informações quando selecionar período
+        periodoSelect.onchange = function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption.value) {
+                const producaoTotal = parseFloat(selectedOption.dataset.producaoTotal) || 0;
+                const sobrasDisponiveis = parseFloat(selectedOption.dataset.sobrasDisponiveis) || 0;
+                const jaFechado = selectedOption.dataset.jaTemFechamento === 'true';
+                
+                // Atualizar informações do produto
+                document.getElementById('period-production-total').textContent = producaoTotal.toFixed(3);
+                document.getElementById('available-waste').textContent = sobrasDisponiveis.toFixed(3);
+                
+                // Mostrar aviso se período já está fechado
+                const avisoContainer = document.getElementById('periodo-aviso-container');
+                if (jaFechado) {
+                    if (!avisoContainer) {
+                        const avisoHtml = `
+                            <div class="alert alert-warning" id="periodo-aviso-container" style="margin-top: 10px; padding: 10px; border-radius: 4px; background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7;">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>Atenção:</strong> Este período já foi finalizado com sobra fechamento. Não é possível registrar novas sobras/perdas.
+                            </div>
+                        `;
+                        periodoSelect.insertAdjacentHTML('afterend', avisoHtml);
+                    }
+                    
+                    // Desabilitar campos do formulário
+                    document.getElementById('waste-type').disabled = true;
+                    document.getElementById('waste-motivo').disabled = true;
+                    document.getElementById('waste-quantity').disabled = true;
+                } else {
+                    // Remover aviso se existir
+                    if (avisoContainer) avisoContainer.remove();
+                    
+                    // Habilitar campos
+                    document.getElementById('waste-type').disabled = false;
+                    document.getElementById('waste-motivo').disabled = false;
+                    document.getElementById('waste-quantity').disabled = false;
+                }
+            }
         };
         
-        this.registros.unshift(registro);
-        this.salvarRegistros();
+        // ADICIONADO: Campo de motivo (adicionar apenas uma vez)
+        let motivoContainer = document.getElementById('waste-motivo-container');
+        if (!motivoContainer) {
+            const motivoHtml = `
+                <div class="form-group" id="waste-motivo-container">
+                    <label for="waste-motivo">
+                        <i class="fas fa-exclamation-circle"></i>
+                        Motivo da Sobra/Perda
+                    </label>
+                    <select id="waste-motivo" required>
+                        <option value="">Selecione o motivo</option>
+                        <option value="fechamento">Fechamento (finaliza período)</option>
+                        <option value="defeito">Defeito/Rejeito</option>
+                        <option value="avaria">Avaria</option>
+                        <option value="experimento">Experimento/Teste</option>
+                        <option value="medida_errada">Medida Errada</option>
+                        <option value="validade">Vencimento/Validade</option>
+                        <option value="outro">Outro</option>
+                    </select>
+                </div>
+            `;
+            
+            // Inserir após o campo de quantidade
+            const quantidadeField = document.getElementById('waste-quantity').closest('.form-group');
+            quantidadeField.insertAdjacentHTML('afterend', motivoHtml);
+        }
         
-        let mensagem = '';
-        if (this.tipoRemanejamento === 'sobra') {
-            mensagem = `Transformação registrada: ${pesoInicial.toFixed(3)} kg → ${pesoFinal.toFixed(3)} kg`;
+        // ADICIONADO: Adicionar campo para valor unitário
+        const valorUnitarioContainer = document.getElementById('valor-unitario-container');
+        if (!valorUnitarioContainer) {
+            const valorHtml = `
+                <div class="form-group" id="valor-unitario-container">
+                    <label for="waste-price-unit">
+                        <i class="fas fa-money-bill-wave"></i>
+                        Valor Unitário (R$/kg)
+                    </label>
+                    <div class="value-display" id="waste-price-unit">${product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00'}</div>
+                    <small>Valor do produto cadastrado na base de dados</small>
+                </div>
+            `;
+            
+            // Inserir após o campo de motivo
+            const motivoField = document.getElementById('waste-motivo');
+            if (motivoField) {
+                motivoField.closest('.form-group').insertAdjacentHTML('afterend', valorHtml);
+            }
         } else {
-            mensagem = `Perda registrada: ${pesoInicial.toFixed(3)} kg perdidos`;
+            // Atualizar valor
+            document.getElementById('waste-price-unit').textContent = product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00';
         }
         
-        this.mostrarNotificacao(mensagem, 'success');
+        // ADICIONADO: Adicionar cálculo automático do valor total
+        const quantidadeInput = document.getElementById('waste-quantity');
+        const valorTotalContainer = document.getElementById('valor-total-container');
         
-        this.resetarRemanejamento();
-        this.atualizarDashboard();
-        
-        if (document.querySelector('#records.tab-content.active')) {
-            this.aplicarFiltros();
-        }
-    }
-    
-    salvarRegistros() {
-        localStorage.setItem('producao_registros', JSON.stringify(this.registros));
-    }
-    
-    aplicarFiltros() {
-        const tipo = document.getElementById('filter-type').value;
-        const dataStr = document.getElementById('filter-date').value;
-        
-        let registrosFiltrados = [...this.registros];
-        
-        // Filtrar por tipo
-        if (tipo !== 'all') {
-            registrosFiltrados = registrosFiltrados.filter(registro => {
-                if (tipo === 'remanejamento') {
-                    return registro.tipo === 'sobra' || registro.tipo === 'perda';
-                }
-                return registro.tipo === tipo;
-            });
-        }
-        
-        // Filtrar por data
-        if (dataStr) {
-            const dataFiltro = moment(dataStr);
-            registrosFiltrados = registrosFiltrados.filter(registro => {
-                return moment(registro.data).isSame(dataFiltro, 'day');
-            });
-        }
-        
-        this.exibirRegistros(registrosFiltrados);
-    }
-    
-    // CORREÇÃO: Aplicar filtros avançados (relatórios)
-    aplicarFiltrosAvancados() {
-        // CORREÇÃO: Usar os filtros corretos do relatório
-        const inicio = document.getElementById('advanced-start').value;
-        const fim = document.getElementById('advanced-end').value;
-        const nomeProduto = document.getElementById('filter-product-name').value.toLowerCase().trim();
-        const codigoProduto = document.getElementById('filter-product-code').value.trim();
-        const tipoDetalhado = document.getElementById('filter-tipo-detalhado').value;
-        
-        console.log('Filtros aplicados:', { inicio, fim, nomeProduto, codigoProduto, tipoDetalhado });
-        
-        let registrosFiltrados = [...this.registros];
-        
-        // Filtrar por período
-        if (inicio && fim) {
-            const dataInicio = moment(inicio).startOf('day');
-            const dataFim = moment(fim).endOf('day');
+        if (!valorTotalContainer) {
+            const valorTotalHtml = `
+                <div class="form-group" id="valor-total-container">
+                    <label for="waste-total-value">
+                        <i class="fas fa-calculator"></i>
+                        Valor Total (R$)
+                    </label>
+                    <div class="value-display" id="waste-total-value">0.00</div>
+                    <small>Calculado automaticamente: Quantidade × Valor Unitário</small>
+                </div>
+            `;
             
-            registrosFiltrados = registrosFiltrados.filter(registro => {
-                const dataRegistro = moment(registro.data);
-                return dataRegistro.isBetween(dataInicio, dataFim, null, '[]');
-            });
-            
-            console.log('Após filtro de data:', registrosFiltrados.length);
-        }
-        
-        // Filtrar por nome do produto
-        if (nomeProduto) {
-            registrosFiltrados = registrosFiltrados.filter(registro => 
-                registro.produto.toLowerCase().includes(nomeProduto)
-            );
-            console.log('Após filtro de nome:', registrosFiltrados.length);
-        }
-        
-        // Filtrar por código do produto
-        if (codigoProduto) {
-            registrosFiltrados = registrosFiltrados.filter(registro => 
-                registro.codigo.toString().includes(codigoProduto)
-            );
-            console.log('Após filtro de código:', registrosFiltrados.length);
-        }
-        
-        // Filtrar por tipo
-        if (tipoDetalhado !== 'all') {
-            registrosFiltrados = registrosFiltrados.filter(registro => registro.tipo === tipoDetalhado);
-            console.log('Após filtro de tipo:', registrosFiltrados.length);
-        }
-        
-        // Atualizar exibição
-        this.gerarRelatorioDetalhado(registrosFiltrados);
-        
-        // Gerar gráficos com os registros filtrados
-        this.gerarGraficosRelatorio(registrosFiltrados, 
-            inicio ? moment(inicio) : moment().subtract(7, 'days'),
-            fim ? moment(fim) : moment()
-        );
-        
-        // Atualizar mensagem de filtro
-        const filtroAtivo = document.getElementById('filter-active');
-        let filtroTexto = '';
-        
-        if (inicio && fim) {
-            filtroTexto += `${moment(inicio).locale('pt-br').format('DD/MM/YYYY')} até ${moment(fim).locale('pt-br').format('DD/MM/YYYY')}`;
-        }
-        
-        if (nomeProduto) filtroTexto += nomeProduto ? ` • Produto: ${nomeProduto}` : '';
-        if (codigoProduto) filtroTexto += codigoProduto ? ` • Código: ${codigoProduto}` : '';
-        if (tipoDetalhado !== 'all') {
-            const tipoText = tipoDetalhado === 'normal' ? 'Produção Normal' : 
-                           tipoDetalhado === 'sobra' ? 'Sobras' : 'Perdas';
-            filtroTexto += tipoDetalhado !== 'all' ? ` • ${tipoText}` : '';
-        }
-        
-        filtroAtivo.textContent = filtroTexto || 'Todos os registros';
-    }
-    
-    resetarFiltrosAvancados() {
-        document.getElementById('filter-product-name').value = '';
-        document.getElementById('filter-product-code').value = '';
-        document.getElementById('filter-tipo-detalhado').value = 'all';
-        document.getElementById('advanced-start').value = moment().subtract(7, 'days').format('YYYY-MM-DD');
-        document.getElementById('advanced-end').value = moment().format('YYYY-MM-DD');
-        
-        this.aplicarFiltrosAvancados();
-    }
-    
-    resetarFiltros() {
-        document.getElementById('filter-type').value = 'all';
-        document.getElementById('filter-date').value = moment().format('YYYY-MM-DD');
-        this.aplicarFiltros();
-    }
-    
-    exibirRegistros(registros) {
-    const tbody = document.getElementById('records-body');
-    
-    if (registros.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="empty-table">
-                    <i class="fas fa-clipboard-list"></i>
-                    Nenhum registro encontrado
-                </td>
-            </tr>
-        `;
-        
-        // Resetar totais
-        document.getElementById('total-peso').textContent = '0 kg';
-        document.getElementById('total-valor').textContent = 'R$ 0,00';
-        document.getElementById('total-diff').textContent = '0 kg';
-        document.getElementById('total-prejuizo').textContent = 'R$ 0,00';
-        
-        return;
-    }
-    
-    let totalPeso = 0;
-    let totalValor = 0;
-    let totalDiff = 0;
-    let totalPrejuizo = 0;
-    
-    tbody.innerHTML = registros.map(registro => {
-        // Calcular valores para exibição
-        let pesoExibir = 0;
-        let valorExibir = 0;
-        let diffExibir = 0;
-        let prejuizoExibir = 0;
-        let detalhes = '';
-        
-        if (registro.tipo === 'normal') {
-            pesoExibir = registro.liquido || 0;
-            valorExibir = registro.valorTotal || 0;
-            detalhes = `Tara: ${(registro.tara || 0).toFixed(3)}kg | Bruto: ${(registro.bruto || 0).toFixed(3)}kg`;
-        } else {
-            pesoExibir = registro.pesoInicial || 0;
-            valorExibir = registro.valorInicial || 0;
-            diffExibir = registro.diferencaPeso || 0;
-            prejuizoExibir = registro.prejuizo || 0;
-            
-            if (registro.tipo === 'sobra') {
-                detalhes = `Transformação para ${registro.destino === 'farinha' ? 'Farinha de Rosca' : 'Torrada Simples'}`;
-            } else {
-                detalhes = 'Perda/Descarte';
+            // Inserir após o valor unitário
+            const valorUnitarioField = document.getElementById('valor-unitario-container');
+            if (valorUnitarioField) {
+                valorUnitarioField.insertAdjacentHTML('afterend', valorTotalHtml);
             }
         }
         
-        // Acumular totais
-        totalPeso += pesoExibir;
-        totalValor += valorExibir;
-        totalDiff += diffExibir;
-        totalPrejuizo += prejuizoExibir;
+        // Adicionar evento para calcular valor total automaticamente
+        quantidadeInput.oninput = function() {
+            const quantidade = parseFloat(this.value) || 0;
+            const valorUnitario = parseFloat(document.getElementById('waste-price-unit').textContent) || 0;
+            const valorTotal = quantidade * valorUnitario;
+            
+            document.getElementById('waste-total-value').textContent = valorTotal.toFixed(2);
+        };
         
-        // Criar badge de tipo
-        let tipoBadge = '';
-        if (registro.tipo === 'normal') {
-            tipoBadge = '<span class="type-badge normal">Normal</span>';
-        } else if (registro.tipo === 'sobra') {
-            tipoBadge = '<span class="type-badge sobra">Sobra</span>';
-        } else {
-            tipoBadge = '<span class="type-badge perda">Perda</span>';
+    } else {
+        selectedProduct.style.display = 'none';
+        
+        // Ocultar select de período
+        if (periodoContainer) periodoContainer.style.display = 'none';
+        
+        // Limpar select de períodos
+        const periodoSelect = document.getElementById('waste-periodo-select');
+        if (periodoSelect) {
+            periodoSelect.innerHTML = '<option value="">Selecione o período</option>';
         }
         
-        // Adicionar ícone de edição se o registro foi editado
-        const editadoIcon = registro.dataEditado ? 
-            '<i class="fas fa-pencil-alt" style="margin-left: 5px; color: #ff9800; font-size: 10px;" title="Editado"></i>' : '';
+        // Remover campos adicionais
+        const motivoContainer = document.getElementById('waste-motivo-container');
+        if (motivoContainer) motivoContainer.remove();
         
-        // Observações se existirem
-        const observacoesExibir = registro.observacoes ? 
-            `<br><small class="observacoes-text">${registro.observacoes}</small>` : '';
+        const valorUnitarioContainer = document.getElementById('valor-unitario-container');
+        if (valorUnitarioContainer) valorUnitarioContainer.remove();
         
-        return `
-            <tr>
-                <td>
-                    ${moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm')}
-                    ${editadoIcon}
-                </td>
-                <td>${tipoBadge}</td>
-                <td>
-                    ${registro.produto}
-                    <br><small>Código: ${registro.codigo}</small>
-                    ${observacoesExibir}
-                </td>
-                <td>${detalhes}</td>
-                <td>${pesoExibir.toFixed(3)} kg</td>
-                <td>${valorExibir.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                <td>${registro.tipo !== 'normal' ? diffExibir.toFixed(3) + ' kg' : '-'}</td>
-                <td>
-                    ${prejuizoExibir > 0 ? 
-                        `<span class="prejuizo-text">${prejuizoExibir.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>` : 
-                        '-'}
-                </td>
-                <td class="actions">
-                    <button class="btn-action btn-edit" title="Editar registro" onclick="sistema.editarRegistro(${registro.id})">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-action btn-delete-row" title="Excluir registro" onclick="sistema.confirmarExcluirRegistro(${registro.id})">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </td>
+        const valorTotalContainer = document.getElementById('valor-total-container');
+        if (valorTotalContainer) valorTotalContainer.remove();
+        
+        const periodoAviso = document.getElementById('periodo-aviso-container');
+        if (periodoAviso) periodoAviso.remove();
+    }
+}
+
+function showWasteForm() {
+    clearWasteForm();
+    document.getElementById('waste-form').style.display = 'block';
+}
+
+function clearWasteForm() {
+    document.getElementById('waste-product-search').value = '';
+    document.getElementById('selected-waste-product').style.display = 'none';
+    document.getElementById('waste-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('waste-type').selectedIndex = 0;
+    document.getElementById('waste-quantity').value = '';
+    document.getElementById('waste-observations').value = '';
+    
+    // ADICIONADO: Limpar e ocultar campos novos
+    const periodoContainer = document.getElementById('periodo-select-container');
+    if (periodoContainer) {
+        periodoContainer.style.display = 'none';
+        const periodoSelect = document.getElementById('waste-periodo-select');
+        if (periodoSelect) {
+            periodoSelect.innerHTML = '<option value="">Selecione o período</option>';
+        }
+    }
+    
+    const motivoSelect = document.getElementById('waste-motivo');
+    if (motivoSelect) {
+        motivoSelect.selectedIndex = 0;
+    }
+    
+    // Remover aviso se existir
+    const periodoAviso = document.getElementById('periodo-aviso-container');
+    if (periodoAviso) periodoAviso.remove();
+    
+    // Remover campos de valor
+    const valorUnitarioContainer = document.getElementById('valor-unitario-container');
+    if (valorUnitarioContainer) valorUnitarioContainer.remove();
+    
+    const valorTotalContainer = document.getElementById('valor-total-container');
+    if (valorTotalContainer) valorTotalContainer.remove();
+    
+    const motivoContainer = document.getElementById('waste-motivo-container');
+    if (motivoContainer) motivoContainer.remove();
+    
+    // Habilitar campos que possam ter sido desabilitados
+    document.getElementById('waste-type').disabled = false;
+    
+    // Restaurar botão de registro se estava em modo edição
+    const registerBtn = document.getElementById('register-waste');
+    if (registerBtn) {
+        registerBtn.innerHTML = '<i class="fas fa-save"></i> Registrar Sobras/Perdas';
+        registerBtn.onclick = registerWaste;
+        registerBtn.disabled = false;
+    }
+    
+    // Remover botão de cancelar edição se existir
+    const cancelEditBtn = document.getElementById('cancel-edit-waste');
+    if (cancelEditBtn) cancelEditBtn.remove();
+}
+
+// Modificar a função registerWaste para incluir o motivo:
+function registerWaste() {
+    // Validar dados
+    const productName = document.getElementById('waste-product-name').textContent;
+    if (productName === '-') {
+        showNotification('Selecione um produto primeiro', 'error');
+        return;
+    }
+    
+    const wasteType = document.getElementById('waste-type').value;
+    if (!wasteType) {
+        showNotification('Selecione o tipo', 'error');
+        return;
+    }
+    
+    // ADICIONADO: Capturar o motivo
+    const wasteMotivo = document.getElementById('waste-motivo').value;
+    if (!wasteMotivo) {
+        showNotification('Informe o motivo da sobra/perda', 'error');
+        return;
+    }
+    
+    const quantity = parseFloat(document.getElementById('waste-quantity').value);
+    if (!quantity || quantity <= 0) {
+        showNotification('Informe a quantidade', 'error');
+        return;
+    }
+    
+    // ADICIONADO: Capturar o período selecionado
+    const periodoSelect = document.getElementById('waste-periodo-select');
+    const periodoId = periodoSelect.value;
+    const periodoText = periodoSelect.options[periodoSelect.selectedIndex].text;
+    
+    if (!periodoId) {
+        showNotification('Selecione um período de produção', 'error');
+        return;
+    }
+    
+    // Verificar se já existe registro de fechamento para este período
+    if (wasteMotivo === 'fechamento') {
+        const existingFechamento = wasteRecords.find(w => 
+            w.periodoId === periodoId && w.motivo === 'fechamento'
+        );
+        if (existingFechamento) {
+            showNotification('Este período já foi finalizado com sobra fechamento', 'error');
+            return;
+        }
+    }
+    
+    // Coletar dados
+    const now = new Date();
+    const record = {
+        id: `WASTE${Date.now()}`,
+        type: wasteType,
+        motivo: wasteMotivo, // ADICIONADO
+        productCode: document.getElementById('selected-waste-product').dataset.code,
+        productName: productName,
+        quantity: quantity,
+        pricePerKg: parseFloat(document.getElementById('selected-waste-product').dataset.price) || 0,
+        date: document.getElementById('waste-date').value || now.toISOString().split('T')[0],
+        periodoId: periodoId, // ADICIONADO
+        periodoText: periodoText, // ADICIONADO
+        observations: document.getElementById('waste-observations').value,
+        timestamp: now.getTime(),
+        
+        // ADICIONADO: Calcular valores automaticamente
+        valorTotal: quantity * (parseFloat(document.getElementById('selected-waste-product').dataset.price) || 0),
+        // Produção total será adicionada depois
+        producaoTotal: 0,
+        diferencaPeso: 0,
+        prejuizo: 0
+    };
+    
+    // Adicionar ao array
+    wasteRecords.push(record);
+    
+    // Salvar no localStorage
+    saveToLocalStorage();
+    
+    // Limpar formulário
+    clearWasteForm();
+    
+    // Mostrar notificação
+    showNotification('Registro de sobras/perdas salvo com sucesso!', 'success');
+    
+    // Atualizar tabela
+    loadWasteRecords();
+}
+
+function loadWasteRecords() {
+    const tbody = document.getElementById('waste-records');
+    tbody.innerHTML = '';
+    
+    if (wasteRecords.length === 0) {
+        tbody.innerHTML = `
+            <tr class="no-data-row">
+                <td colspan="9">Nenhum registro de sobras/perdas encontrado</td>
             </tr>
         `;
-    }).join('');
+        return;
+    }
+    
+    wasteRecords.sort((a, b) => b.timestamp - a.timestamp).forEach(record => {
+        const date = new Date(record.timestamp);
+        const formattedDate = date.toLocaleDateString('pt-BR');
+        const formattedTime = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        
+        // CORREÇÃO: Buscar produção total do período específico
+        let producaoTotalPeriodo = 0;
+        if (record.periodoId) {
+            producaoTotalPeriodo = productionRecords
+                .filter(p => p.productCode === record.productCode && p.date === record.periodoId)
+                .reduce((sum, p) => sum + p.netWeight, 0);
+        }
+        
+        // Calcular diferença (peso sobra vs produção)
+        const diferencaPeso = producaoTotalPeriodo - record.quantity;
+        
+        // Calcular prejuízo (diferenca * valor/kg)
+        const prejuizo = diferencaPeso * record.pricePerKg;
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${formattedDate} ${formattedTime}</td>
+            <td>${record.type === 'sobra' ? 'SOBRA' : 'PERDA'}</td>
+            <td>${record.productName}</td>
+            <td>${record.quantity.toFixed(3)} kg</td>
+            <td>R$ ${(record.quantity * record.pricePerKg).toFixed(2)}</td>
+            <td>${producaoTotalPeriodo.toFixed(3)} kg</td>
+            <td>${diferencaPeso.toFixed(3)} kg</td>
+            <td>R$ ${prejuizo.toFixed(2)}</td>
+            <td>
+                <button class="btn btn-small btn-icon" onclick="editWasteRecord('${record.id}')">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-small btn-icon btn-danger" onclick="deleteWasteRecord('${record.id}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Funções de Remanejamento
+function handleReassignmentSearch() {
+    const searchTerm = document.getElementById('reassignment-product-search').value.trim().toLowerCase();
+    const resultsContainer = document.getElementById('reassignment-results');
+    
+    if (searchTerm.length === 0) {
+        resultsContainer.innerHTML = '';
+        return;
+    }
+    
+    // Verificar se é apenas número (código)
+    const isNumericCode = /^\d+$/.test(searchTerm);
+    
+    // Para códigos, buscar exato mesmo com 1 caractere
+    // Para nomes, mínimo de 2 caracteres
+    if (!isNumericCode && searchTerm.length < 2) {
+        resultsContainer.innerHTML = '';
+        return;
+    }
+    
+    let products = [];
+    if (isNumericCode) {
+        // Buscar por código exato
+        const product = productBase.getProductByCode(searchTerm);
+        if (product) products = [product];
+    } else {
+        // Buscar por nome
+        products = productBase.searchProduct(searchTerm);
+    }
+    
+    resultsContainer.innerHTML = '';
+    
+    if (products.length === 0) {
+        resultsContainer.innerHTML = '<div class="search-result-item">Nenhum produto encontrado</div>';
+        return;
+    }
+    
+    // ADICIONADO: Nova seção mais interativa
+    const interactiveSection = document.createElement('div');
+    interactiveSection.className = 'interactive-section';
+    interactiveSection.innerHTML = `
+        <div class="section-header">
+            <h4><i class="fas fa-boxes"></i> Sobras Registradas por Produto</h4>
+            <p>Selecione uma das sobras abaixo ou busque pelo código/nome</p>
+        </div>
+    `;
+    resultsContainer.appendChild(interactiveSection);
+    
+    // ADICIONADO: Lista de sobras disponíveis por produto
+    let hasWasteRecords = false;
+    
+    products.forEach(product => {
+        // BUSCAR SOBRAS ESPECÍFICAS (não produção)
+        const wasteRecordsForProduct = wasteRecords.filter(w => 
+            w.productCode === product.code && 
+            w.type === 'sobra' && 
+            w.quantity > 0
+        );
+        
+        if (wasteRecordsForProduct.length > 0) {
+            hasWasteRecords = true;
+            
+            const productSection = document.createElement('div');
+            productSection.className = 'product-waste-section';
+            
+            // Calcular total de sobras deste produto
+            const totalWaste = wasteRecordsForProduct.reduce((sum, w) => sum + w.quantity, 0);
+            
+            productSection.innerHTML = `
+                <div class="product-header">
+                    <strong>${product.name}</strong>
+                    <span class="product-code">Código: ${product.code}</span>
+                    <span class="waste-total">Sobras: ${totalWaste.toFixed(3)} kg</span>
+                </div>
+            `;
+            
+            // Adicionar detalhes por período
+            const detailsDiv = document.createElement('div');
+            detailsDiv.className = 'waste-details';
+            
+            wasteRecordsForProduct.forEach(waste => {
+                const wasteDate = new Date(waste.timestamp);
+                const formattedDate = wasteDate.toLocaleDateString('pt-BR');
+                const formattedTime = wasteDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                
+                const wasteItem = document.createElement('div');
+                wasteItem.className = 'waste-item';
+                wasteItem.innerHTML = `
+                    <div class="waste-info">
+                        <div class="waste-periodo">
+                            <i class="fas fa-calendar"></i>
+                            <span>${waste.periodoText || formattedDate}</span>
+                        </div>
+                        <div class="waste-quantity">
+                            <i class="fas fa-weight-hanging"></i>
+                            <span>${waste.quantity.toFixed(3)} kg</span>
+                        </div>
+                        <div class="waste-value">
+                            <i class="fas fa-money-bill-wave"></i>
+                            <span>R$ ${((waste.quantity || 0) * (waste.pricePerKg || 0)).toFixed(2)}</span>
+                        </div>
+                        <div class="waste-motivo">
+                            <i class="fas fa-tag"></i>
+                            <span>${waste.motivo || 'Sem motivo'}</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-small btn-select" data-waste-id="${waste.id}">
+                        <i class="fas fa-check"></i>
+                        Selecionar
+                    </button>
+                `;
+                
+                // Adicionar evento para selecionar esta sobra específica
+                wasteItem.querySelector('.btn-select').addEventListener('click', function() {
+                    selectOriginProduct(product, waste.quantity, waste.id, waste);
+                    resultsContainer.innerHTML = '';
+                });
+                
+                detailsDiv.appendChild(wasteItem);
+            });
+            
+            productSection.appendChild(detailsDiv);
+            resultsContainer.appendChild(productSection);
+        }
+    });
+    
+    // Se não houver sobras registradas, manter a busca normal
+    if (!hasWasteRecords) {
+        interactiveSection.innerHTML = `
+            <div class="section-header">
+                <h4><i class="fas fa-info-circle"></i> Nenhuma sobra registrada encontrada</h4>
+                <p>Busque pelo produto para ver produção disponível</p>
+            </div>
+        `;
+        
+        // MANTER A FUNCIONALIDADE ORIGINAL (não remover)
+        products.slice(0, 10).forEach(product => {
+            // CALCULAR APENAS SOBRAS DISPONÍVEIS (não produção total)
+            const productWaste = wasteRecords.filter(w => 
+                w.productCode === product.code && w.type === 'sobra'
+            );
+            const totalWaste = productWaste.reduce((sum, w) => sum + w.quantity, 0);
+            
+            const item = document.createElement('div');
+            item.className = 'search-result-item';
+            item.innerHTML = `
+                <div class="product-name">${product.name}</div>
+                <div class="product-code">Código: ${product.code} | Sobras: ${totalWaste.toFixed(3)} kg</div>
+                ${totalWaste > 0 ? '<div class="waste-indicator"><i class="fas fa-check-circle"></i> Com sobras</div>' : ''}
+            `;
+            
+            item.addEventListener('click', () => {
+                selectOriginProduct(product, totalWaste);
+                resultsContainer.innerHTML = '';
+            });
+            
+            resultsContainer.appendChild(item);
+        });
+    }
+}
+
+function selectOriginProduct(product, availableWaste, wasteId = null, wasteRecord = null) {
+    currentOriginProduct = {
+        ...product,
+        availableWaste: availableWaste,
+        wasteId: wasteId,
+        wasteRecord: wasteRecord
+    };
+    
+    const selectedDiv = document.getElementById('selected-origin-product');
+    selectedDiv.style.display = 'block';
+    
+    document.getElementById('origin-code').textContent = product.code;
+    document.getElementById('origin-name').textContent = product.name;
+    document.getElementById('origin-available').textContent = availableWaste.toFixed(3);
+    document.getElementById('origin-price').textContent = product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00';
+    
+    document.getElementById('origin-price-display').textContent = product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00';
+    
+    // ADICIONADO: Mostrar informações da sobra específica se houver
+    if (wasteRecord) {
+        const wasteInfoDiv = document.createElement('div');
+        wasteInfoDiv.className = 'selected-waste-info';
+        wasteInfoDiv.innerHTML = `
+            <div class="waste-details">
+                <strong>Detalhes da Sobra Selecionada:</strong>
+                <div>Período: ${wasteRecord.periodoText || 'Não informado'}</div>
+                <div>Motivo: ${wasteRecord.motivo || 'Não informado'}</div>
+                <div>Data do Registro: ${new Date(wasteRecord.timestamp).toLocaleDateString('pt-BR')}</div>
+            </div>
+        `;
+        
+        // Inserir após as informações básicas do produto
+        const originDetails = document.querySelector('.product-details');
+        if (originDetails) {
+            // Remover info anterior se existir
+            const existingInfo = document.querySelector('.selected-waste-info');
+            if (existingInfo) existingInfo.remove();
+            
+            originDetails.appendChild(wasteInfoDiv);
+        }
+    }
+    
+    // Atualizar informações do remanejamento
+    document.getElementById('info-origin').textContent = product.name;
+    
+    // Avançar para próxima etapa
+    nextReassignmentStep();
+}
+
+function selectReassignmentType(type) {
+    currentReassignmentType = type;
+    
+    // Atualizar UI
+    document.querySelectorAll('.type-option').forEach(option => {
+        option.classList.remove('active');
+    });
+    
+    const selectedOption = document.querySelector(`.type-option[data-type="${type}"]`);
+    selectedOption.classList.add('active');
+    
+    // Atualizar informações
+    let typeText = '';
+    let destination = '';
+    let destinationCode = '';
+    
+    switch(type) {
+        case 'farinha':
+            typeText = 'Sobra/Transformação';
+            destination = 'Farinha de Rosca';
+            destinationCode = 'FARINHA_ROSCA';
+            break;
+        case 'torrada':
+            typeText = 'Sobra/Transformação';
+            destination = 'Torrada';
+            destinationCode = 'TORRADA';
+            break;
+        case 'perda':
+            typeText = 'Perda/Descarte';
+            destination = 'Descarte';
+            destinationCode = 'DESCARTE';
+            break;
+    }
+    
+    document.getElementById('info-type').textContent = typeText;
+    document.getElementById('info-destination').textContent = destination;
+    
+    // ADICIONADO: Verificar se o produto destino está na base de dados (para farinha/torrada)
+    if (type === 'farinha' || type === 'torrada') {
+        // Buscar produtos que correspondam ao destino
+        const destinationProducts = productBase.searchProduct(destination.toLowerCase());
+        
+        // Criar ou atualizar select para escolher produto destino
+        let destinationSelectContainer = document.getElementById('destination-select-container');
+        
+        if (!destinationSelectContainer) {
+            destinationSelectContainer = document.createElement('div');
+            destinationSelectContainer.id = 'destination-select-container';
+            destinationSelectContainer.className = 'form-group';
+            destinationSelectContainer.innerHTML = `
+                <label for="destination-product-select">
+                    <i class="fas fa-box"></i>
+                    Produto Destino
+                </label>
+                <select id="destination-product-select">
+                    <option value="">Selecione o produto destino...</option>
+                </select>
+            `;
+            
+            // Inserir antes dos campos de peso
+            const initialWeightField = document.getElementById('initial-weight').closest('.detail-group');
+            if (initialWeightField) {
+                initialWeightField.parentElement.insertBefore(destinationSelectContainer, initialWeightField.parentElement.firstChild);
+            }
+        }
+        
+        const destinationSelect = document.getElementById('destination-product-select');
+        destinationSelect.innerHTML = '<option value="">Selecione o produto destino...</option>';
+        
+        if (destinationProducts.length > 0) {
+            destinationProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.code;
+                option.textContent = `${product.name} (Código: ${product.code}) - R$ ${product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00'}/kg`;
+                option.dataset.price = product.pricePerKg || 0;
+                destinationSelect.appendChild(option);
+            });
+            
+            // Adicionar opção para criar novo produto
+            const newProductOption = document.createElement('option');
+            newProductOption.value = 'new';
+            newProductOption.textContent = '➤ Cadastrar novo produto...';
+            destinationSelect.appendChild(newProductOption);
+            
+        } else {
+            // Se não encontrar produtos, oferecer opção para cadastrar
+            destinationSelect.innerHTML = `
+                <option value="">Nenhum produto "${destination}" encontrado</option>
+                <option value="new">Cadastrar novo produto "${destination}"...</option>
+            `;
+        }
+        
+        // Adicionar evento para quando selecionar produto destino
+        destinationSelect.onchange = function() {
+            const selectedValue = this.value;
+            
+            if (selectedValue === 'new') {
+                // Oferecer para cadastrar novo produto
+                if (confirm(`Deseja cadastrar o produto "${destination}" na base de dados?`)) {
+                    showProductModalForDestination(destination, destinationCode, type);
+                } else {
+                    this.selectedIndex = 0;
+                }
+            } else if (selectedValue) {
+                // Atualizar preço destino com base no produto selecionado
+                const selectedOption = this.options[this.selectedIndex];
+                const destinationPrice = parseFloat(selectedOption.dataset.price) || 0;
+                document.getElementById('destination-price').value = destinationPrice.toFixed(2);
+                
+                // Calcular automaticamente
+                calculateReassignment();
+            }
+        };
+    } else {
+        // Para perda/descarte, remover select se existir
+        const destinationSelectContainer = document.getElementById('destination-select-container');
+        if (destinationSelectContainer) {
+            destinationSelectContainer.remove();
+        }
+    }
+    
+    // Mostrar informações
+    document.getElementById('reassignment-info').style.display = 'block';
+    
+    // Avançar para próxima etapa
+    nextReassignmentStep();
+}
+
+function showProductModalForDestination(productName, productCode, reassignmentType) {
+    const modal = document.getElementById('product-modal');
+    const form = document.getElementById('product-form');
+    
+    // Preencher com dados sugeridos
+    document.getElementById('modal-product-name').value = productName;
+    document.getElementById('modal-product-code').value = productCode;
+    document.getElementById('modal-product-tara').value = 0;
+    document.getElementById('modal-product-price').value = 0;
+    document.getElementById('modal-product-id').value = '';
+    
+    document.querySelector('#product-modal h3').innerHTML = `<i class="fas fa-box"></i> Cadastrar Produto para Remanejamento`;
+    
+    // Sobrescrever função save para lidar com o redirecionamento
+    const originalSaveFunction = document.getElementById('save-product').onclick;
+    
+    document.getElementById('save-product').onclick = function() {
+        // Validar formulário
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        
+        const productData = {
+            name: document.getElementById('modal-product-name').value,
+            code: document.getElementById('modal-product-code').value,
+            tara: parseFloat(document.getElementById('modal-product-tara').value),
+            pricePerKg: parseFloat(document.getElementById('modal-product-price').value)
+        };
+        
+        try {
+            // Adicionar novo produto
+            productBase.addProduct(productData);
+            
+            // Salvar no localStorage
+            saveToLocalStorage();
+            
+            showNotification('Produto cadastrado com sucesso!', 'success');
+            
+            // Fechar modal
+            closeProductModal();
+            
+            // Atualizar select de produtos destino
+            const destinationSelect = document.getElementById('destination-product-select');
+            if (destinationSelect) {
+                destinationSelect.innerHTML = '<option value="">Selecione o produto destino...</option>';
+                
+                // Buscar produto recém-cadastrado
+                const destinationProducts = productBase.searchProduct(productName.toLowerCase());
+                
+                destinationProducts.forEach(product => {
+                    const option = document.createElement('option');
+                    option.value = product.code;
+                    option.textContent = `${product.name} (Código: ${product.code}) - R$ ${product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00'}/kg`;
+                    option.dataset.price = product.pricePerKg || 0;
+                    
+                    // Selecionar automaticamente o produto recém-cadastrado
+                    if (product.code === productCode) {
+                        option.selected = true;
+                        destinationSelect.value = product.code;
+                        
+                        // Atualizar preço destino
+                        document.getElementById('destination-price').value = product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00';
+                        
+                        // Calcular automaticamente
+                        calculateReassignment();
+                    }
+                    
+                    destinationSelect.appendChild(option);
+                });
+            }
+            
+            // Restaurar função original
+            document.getElementById('save-product').onclick = originalSaveFunction;
+            
+        } catch (error) {
+            showNotification('Erro ao cadastrar produto: ' + error.message, 'error');
+        }
+    };
+    
+    modal.classList.add('active');
+}
+
+
+
+function calculateReassignment() {
+    const initialWeight = parseFloat(document.getElementById('initial-weight').value) || 0;
+    const finalWeight = parseFloat(document.getElementById('final-weight').value) || 0;
+    const originPrice = parseFloat(document.getElementById('origin-price-display').textContent) || 0;
+    
+    // ADICIONADO: Obter preço destino automaticamente
+    let destinationPrice = 0;
+    
+    // Verificar se há select de produto destino
+    const destinationSelect = document.getElementById('destination-product-select');
+    if (destinationSelect && destinationSelect.value && destinationSelect.value !== 'new') {
+        const selectedOption = destinationSelect.options[destinationSelect.selectedIndex];
+        destinationPrice = parseFloat(selectedOption.dataset.price) || 0;
+    } else {
+        // Usar valor digitado pelo usuário
+        destinationPrice = parseFloat(document.getElementById('destination-price').value) || 0;
+    }
+    
+    // Atualizar campo de preço destino com o valor atual
+    document.getElementById('destination-price').value = destinationPrice.toFixed(2);
+    
+    // VALIDAÇÃO: Verificar se o peso inicial não excede as sobras disponíveis
+    if (currentOriginProduct && initialWeight > currentOriginProduct.availableWaste) {
+        showNotification(`Peso inicial excede as sobras disponíveis (${currentOriginProduct.availableWaste.toFixed(3)} kg)`, 'error');
+        document.getElementById('initial-weight').style.borderColor = '#dc2626';
+        return;
+    } else {
+        document.getElementById('initial-weight').style.borderColor = '';
+    }
+    
+    // VALIDAÇÃO: Para perda, o peso final deve ser 0
+    if (currentReassignmentType === 'perda' && finalWeight > 0) {
+        showNotification('Para perda/descarte, o peso final deve ser 0', 'warning');
+        document.getElementById('final-weight').style.borderColor = '#d97706';
+    } else {
+        document.getElementById('final-weight').style.borderColor = '';
+    }
+    
+    // Cálculos
+    const weightDifference = initialWeight - finalWeight;
+    const initialValue = initialWeight * originPrice;
+    const finalValue = finalWeight * destinationPrice;
+    const lossValue = initialValue - finalValue;
+    
+    // Atualizar cards
+    document.getElementById('weight-difference').textContent = `${weightDifference.toFixed(3)} kg`;
+    document.getElementById('initial-value').textContent = `R$ ${initialValue.toFixed(2)}`;
+    document.getElementById('final-value').textContent = `R$ ${finalValue.toFixed(2)}`;
+    document.getElementById('loss-value').textContent = `R$ ${lossValue.toFixed(2)}`;
+    
+    // ADICIONADO: Destaque visual para valores negativos (prejuízo)
+    const lossValueElement = document.getElementById('loss-value');
+    if (lossValue > 0) {
+        lossValueElement.style.color = '#dc2626';
+        lossValueElement.innerHTML = `R$ ${lossValue.toFixed(2)} <i class="fas fa-arrow-down"></i>`;
+    } else if (lossValue < 0) {
+        lossValueElement.style.color = '#059669';
+        lossValueElement.innerHTML = `R$ ${Math.abs(lossValue).toFixed(2)} <i class="fas fa-arrow-up"></i>`;
+    } else {
+        lossValueElement.style.color = '';
+        lossValueElement.textContent = `R$ ${lossValue.toFixed(2)}`;
+    }
+}
+
+function resetReassignment() {
+    currentReassignmentStep = 1;
+    currentReassignmentType = null;
+    currentOriginProduct = null;
+    
+    // Resetar UI
+    document.querySelectorAll('.step').forEach(step => {
+        step.classList.remove('active');
+    });
+    document.querySelector('.step[data-step="1"]').classList.add('active');
+    
+    document.querySelectorAll('.step-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.querySelector('.step-content[data-step="1"]').classList.add('active');
+    
+    document.querySelectorAll('.type-option').forEach(option => {
+        option.classList.remove('active');
+    });
+    
+    // Limpar campos
+    document.getElementById('reassignment-product-search').value = '';
+    document.getElementById('selected-origin-product').style.display = 'none';
+    document.getElementById('reassignment-info').style.display = 'none';
+    document.getElementById('initial-weight').value = '';
+    document.getElementById('final-weight').value = '';
+    document.getElementById('destination-price').value = '';
+    document.getElementById('reassignment-observations').value = '';
+    
+    // ADICIONADO: Remover elementos criados dinamicamente
+    const destinationSelectContainer = document.getElementById('destination-select-container');
+    if (destinationSelectContainer) {
+        destinationSelectContainer.remove();
+    }
+    
+    const selectedWasteInfo = document.querySelector('.selected-waste-info');
+    if (selectedWasteInfo) {
+        selectedWasteInfo.remove();
+    }
+    
+    // Resetar cálculos
+    document.getElementById('weight-difference').textContent = '0.000 kg';
+    document.getElementById('initial-value').textContent = 'R$ 0,00';
+    document.getElementById('final-value').textContent = 'R$ 0,00';
+    document.getElementById('loss-value').textContent = 'R$ 0,00';
+    
+    // Limpar estilos de validação
+    document.getElementById('initial-weight').style.borderColor = '';
+    document.getElementById('final-weight').style.borderColor = '';
+    
+    // Atualizar navegação
+    updateReassignmentNavigation();
+}
+
+function prevReassignmentStep() {
+    if (currentReassignmentStep > 1) {
+        currentReassignmentStep--;
+        updateReassignmentUI();
+    }
+}
+
+function nextReassignmentStep() {
+    // Validar etapa atual antes de avançar
+    if (currentReassignmentStep === 1 && !currentOriginProduct) {
+        showNotification('Selecione um produto de origem primeiro', 'error');
+        return;
+    }
+    
+    if (currentReassignmentStep === 2 && !currentReassignmentType) {
+        showNotification('Selecione um tipo de remanejamento', 'error');
+        return;
+    }
+    
+    if (currentReassignmentStep < 3) {
+        currentReassignmentStep++;
+        updateReassignmentUI();
+    }
+}
+
+function updateReassignmentUI() {
+    // Atualizar steps
+    document.querySelectorAll('.step').forEach(step => {
+        step.classList.remove('active');
+        if (parseInt(step.dataset.step) <= currentReassignmentStep) {
+            step.classList.add('active');
+        }
+    });
+    
+    // Atualizar conteúdo
+    document.querySelectorAll('.step-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.querySelector(`.step-content[data-step="${currentReassignmentStep}"]`).classList.add('active');
+    
+    // Atualizar navegação
+    updateReassignmentNavigation();
+}
+
+function updateReassignmentNavigation() {
+    document.getElementById('current-step').textContent = currentReassignmentStep;
+    
+    const prevBtn = document.getElementById('prev-step');
+    const nextBtn = document.getElementById('next-step');
+    const registerBtn = document.getElementById('register-reassignment');
+    
+    if (currentReassignmentStep === 1) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'flex';
+        registerBtn.style.display = 'none';
+    } else if (currentReassignmentStep === 2) {
+        prevBtn.style.display = 'flex';
+        nextBtn.style.display = 'flex';
+        registerBtn.style.display = 'none';
+    } else if (currentReassignmentStep === 3) {
+        prevBtn.style.display = 'flex';
+        nextBtn.style.display = 'none';
+        registerBtn.style.display = 'flex';
+    }
+}
+
+function registerReassignment() {
+    // Validar dados
+    if (!currentOriginProduct) {
+        showNotification('Produto de origem não selecionado', 'error');
+        return;
+    }
+    
+    if (!currentReassignmentType) {
+        showNotification('Tipo de remanejamento não selecionado', 'error');
+        return;
+    }
+    
+    const initialWeight = parseFloat(document.getElementById('initial-weight').value);
+    if (!initialWeight || initialWeight <= 0) {
+        showNotification('Informe o peso inicial', 'error');
+        return;
+    }
+    
+    // Verificar se há sobras suficientes
+    if (initialWeight > currentOriginProduct.availableWaste) {
+        showNotification(`Peso inicial excede as sobras disponíveis (${currentOriginProduct.availableWaste.toFixed(3)} kg)`, 'error');
+        return;
+    }
+    
+    const finalWeight = parseFloat(document.getElementById('final-weight').value) || 0;
+    const destinationPrice = parseFloat(document.getElementById('destination-price').value) || 0;
+    
+    // Calcular valores
+    const originPrice = currentOriginProduct.pricePerKg || 0;
+    const weightDifference = initialWeight - finalWeight;
+    const initialValue = initialWeight * originPrice;
+    const finalValue = finalWeight * destinationPrice;
+    const lossValue = initialValue - finalValue;
+    
+    // Determinar tipo de destino
+    let destinationType = '';
+    let destinationName = '';
+    
+    switch(currentReassignmentType) {
+        case 'farinha':
+            destinationType = 'farinha_rosca';
+            destinationName = 'Farinha de Rosca';
+            break;
+        case 'torrada':
+            destinationType = 'torrada';
+            destinationName = 'Torrada';
+            break;
+        case 'perda':
+            destinationType = 'perda';
+            destinationName = 'Descarte';
+            break;
+    }
+    
+    // Criar registro
+    const now = new Date();
+    const record = {
+        id: `REASSIGN${Date.now()}`,
+        type: 'reassignment',
+        originProductCode: currentOriginProduct.code,
+        originProductName: currentOriginProduct.name,
+        destinationType: destinationType,
+        destinationName: destinationName,
+        initialWeight: initialWeight,
+        finalWeight: finalWeight,
+        weightDifference: weightDifference,
+        originPricePerKg: originPrice,
+        destinationPricePerKg: destinationPrice,
+        initialValue: initialValue,
+        finalValue: finalValue,
+        lossValue: lossValue,
+        observations: document.getElementById('reassignment-observations').value,
+        date: now.toISOString().split('T')[0],
+        time: now.toTimeString().split(' ')[0],
+        timestamp: now.getTime()
+    };
+    
+    // Adicionar ao array
+    reassignmentRecords.push(record);
+    
+    // Atualizar sobras disponíveis (remover do estoque)
+    // Esta é uma simplificação - em um sistema real, seria mais complexo
+    const wasteIndex = wasteRecords.findIndex(w => 
+        w.productCode === currentOriginProduct.code && w.type === 'sobra'
+    );
+    
+    if (wasteIndex !== -1) {
+        wasteRecords[wasteIndex].quantity -= initialWeight;
+        if (wasteRecords[wasteIndex].quantity <= 0) {
+            wasteRecords.splice(wasteIndex, 1);
+        }
+    }
+    
+    // Salvar no localStorage
+    saveToLocalStorage();
+    
+    // Mostrar notificação
+    showNotification('Remanejamento registrado com sucesso!', 'success');
+    
+    // Resetar formulário
+    resetReassignment();
+    
+    // Atualizar outras páginas
+    loadWasteRecords();
+}
+
+// Funções de Registros
+function loadRecords(filters = {}) {
+    // Combinar todos os registros
+    let allRecords = [
+        ...productionRecords.map(r => ({ ...r, recordType: 'production' })),
+        ...wasteRecords.map(r => ({ ...r, recordType: r.type, date: r.date || new Date().toISOString().split('T')[0] })),
+        ...reassignmentRecords.map(r => ({ ...r, recordType: 'reassignment' }))
+    ];
+    
+    // Aplicar filtros
+    if (filters.type) {
+        allRecords = allRecords.filter(r => {
+            if (filters.type === 'production') return r.recordType === 'production';
+            if (filters.type === 'reassignment') return r.recordType === 'reassignment';
+            if (filters.type === 'sobra' || filters.type === 'perda') return r.recordType === filters.type;
+            return true;
+        });
+    }
+    
+    if (filters.product) {
+        const searchTerm = filters.product.toLowerCase();
+        allRecords = allRecords.filter(r => 
+            (r.productName && r.productName.toLowerCase().includes(searchTerm)) ||
+            (r.originProductName && r.originProductName.toLowerCase().includes(searchTerm))
+        );
+    }
+    
+    if (filters.startDate) {
+        allRecords = allRecords.filter(r => r.date >= filters.startDate);
+    }
+    
+    if (filters.endDate) {
+        allRecords = allRecords.filter(r => r.date <= filters.endDate);
+    }
+    
+    // Ordenar por data mais recente
+    allRecords.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    
+    // Atualizar tabela
+    updateRecordsTable(allRecords);
+}
+
+function applyRecordFilters() {
+    const filters = {
+        type: document.getElementById('record-type').value,
+        product: document.getElementById('record-product').value,
+        startDate: document.getElementById('start-date').value,
+        endDate: document.getElementById('end-date').value
+    };
+    
+    loadRecords(filters);
+}
+
+function clearRecordFilters() {
+    document.getElementById('record-type').selectedIndex = 0;
+    document.getElementById('record-product').value = '';
+    document.getElementById('start-date').value = '';
+    document.getElementById('end-date').value = '';
+    
+    loadRecords();
+}
+
+function updateRecordsTable(records) {
+    const tbody = document.getElementById('records-table');
+    const totalWeightElem = document.getElementById('total-weight');
+    const totalValueElem = document.getElementById('total-value-sum');
+    const totalDifferenceElem = document.getElementById('total-difference');
+    const totalLossElem = document.getElementById('total-loss');
+    
+    tbody.innerHTML = '';
+    
+    if (records.length === 0) {
+        tbody.innerHTML = `
+            <tr class="no-data-row">
+                <td colspan="9">Nenhum registro encontrado</td>
+            </tr>
+        `;
+        
+        totalWeightElem.textContent = '0 kg';
+        totalValueElem.textContent = 'R$ 0,00';
+        totalDifferenceElem.textContent = '0 kg';
+        totalLossElem.textContent = 'R$ 0,00';
+        
+        document.getElementById('records-count').textContent = '0';
+        return;
+    }
+    
+    // Calcular totais
+    let totalWeight = 0;
+    let totalValue = 0;
+    let totalDifference = 0;
+    let totalLoss = 0;
+    
+    records.forEach(record => {
+        const date = new Date(record.timestamp || Date.now());
+        const formattedDate = date.toLocaleDateString('pt-BR');
+        const formattedTime = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        
+        let typeBadge = '';
+        let productName = '';
+        let details = '';
+        let weight = 0;
+        let value = 0;
+        let difference = '-';
+        let loss = '-';
+        
+        switch(record.recordType) {
+            case 'production':
+                typeBadge = '<span class="badge badge-production">Produção</span>';
+                productName = record.productName;
+                details = record.employeeName || '-';
+                weight = record.netWeight || 0;
+                value = record.totalValue || 0;
+                totalWeight += weight;
+                totalValue += value;
+                break;
+                
+            case 'sobra':
+            case 'perda':
+                typeBadge = record.recordType === 'sobra' 
+                    ? '<span class="badge badge-waste">Sobra</span>' 
+                    : '<span class="badge badge-danger">Perda</span>';
+                productName = record.productName;
+                details = record.observations || '-';
+                weight = record.quantity || 0;
+                value = (record.quantity || 0) * (record.pricePerKg || 0);
+                totalWeight += weight;
+                totalValue += value;
+                break;
+                
+            case 'reassignment':
+                typeBadge = '<span class="badge badge-reassignment">Remanejamento</span>';
+                productName = record.originProductName;
+                details = `Para: ${record.destinationName}`;
+                weight = record.initialWeight || 0;
+                value = record.initialValue || 0;
+                difference = `${record.weightDifference?.toFixed(3) || 0} kg`;
+                loss = record.lossValue ? `R$ ${record.lossValue.toFixed(2)}` : 'R$ 0,00';
+                totalWeight += weight;
+                totalValue += value;
+                totalDifference += record.weightDifference || 0;
+                totalLoss += record.lossValue || 0;
+                break;
+        }
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${formattedDate} ${formattedTime}</td>
+            <td>${typeBadge}</td>
+            <td>${productName}</td>
+            <td>${details}</td>
+            <td>${weight.toFixed(3)} kg</td>
+            <td>R$ ${value.toFixed(2)}</td>
+            <td>${difference}</td>
+            <td>${loss}</td>
+            <td>
+                <button class="btn btn-small btn-icon" onclick="viewRecordDetails('${record.id}', '${record.recordType}')">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
     
     // Atualizar totais
-    document.getElementById('total-peso').textContent = totalPeso.toFixed(3) + ' kg';
-    document.getElementById('total-valor').textContent = 
-        totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    document.getElementById('total-diff').textContent = totalDiff.toFixed(3) + ' kg';
-    document.getElementById('total-prejuizo').textContent = 
-        totalPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    totalWeightElem.textContent = `${totalWeight.toFixed(3)} kg`;
+    totalValueElem.textContent = `R$ ${totalValue.toFixed(2)}`;
+    totalDifferenceElem.textContent = `${totalDifference.toFixed(3)} kg`;
+    totalLossElem.textContent = `R$ ${totalLoss.toFixed(2)}`;
+    
+    document.getElementById('records-count').textContent = records.length.toString();
 }
+
+// Funções de Relatórios
+function loadReports() {
+    // Esta função carregaria dados para os relatórios
+    // Por enquanto, vamos apenas mostrar dados básicos
     
-    confirmarExcluirRegistro(id) {
-    const registro = this.registros.find(r => r.id === id);
-    if (!registro) {
-        this.mostrarNotificacao('Registro não encontrado', 'error');
-        return;
-    }
+    const totalProduction = productionRecords.reduce((sum, r) => sum + r.netWeight, 0);
+    const totalProductionValue = productionRecords.reduce((sum, r) => sum + r.totalValue, 0);
     
-    let tipoTexto = '';
-    if (registro.tipo === 'normal') {
-        tipoTexto = 'produção normal';
-    } else if (registro.tipo === 'sobra') {
-        tipoTexto = 'transformação de sobra';
-    } else {
-        tipoTexto = 'perda/descarte';
-    }
+    const totalWaste = wasteRecords.filter(w => w.type === 'perda')
+        .reduce((sum, w) => sum + w.quantity, 0);
+    const totalWasteValue = wasteRecords.filter(w => w.type === 'perda')
+        .reduce((sum, w) => sum + (w.quantity * (w.pricePerKg || 0)), 0);
     
-    this.mostrarModal(
-        `<strong>Tem certeza que deseja excluir permanentemente este registro?</strong><br><br>
-         <strong>Produto:</strong> ${registro.produto}<br>
-         <strong>Tipo:</strong> ${tipoTexto}<br>
-         <strong>Data:</strong> ${moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm')}<br><br>
-         <em>Esta ação não pode ser desfeita.</em>`,
-        () => this.excluirRegistro(id)
-    );
+    document.getElementById('report-production-total').textContent = `${totalProduction.toFixed(3)} kg`;
+    document.getElementById('report-value-total').textContent = `R$ ${totalProductionValue.toFixed(2)}`;
+    document.getElementById('report-loss-total').textContent = `${totalWaste.toFixed(3)} kg`;
+    document.getElementById('report-loss-value').textContent = `R$ ${totalWasteValue.toFixed(2)}`;
+    
+    // Atualizar tabela de detalhes
+    updateReportDetails();
 }
-    
-    excluirRegistro(id) {
-        const index = this.registros.findIndex(r => r.id === id);
-        if (index !== -1) {
-            this.registros.splice(index, 1);
-            this.salvarRegistros();
-            this.aplicarFiltros();
-            this.atualizarDashboard();
-            this.mostrarNotificacao('Registro excluído com sucesso', 'success');
-        }
-    }
-    
-    confirmarLimparRegistros() {
-        if (this.registros.length === 0) return;
-        
-        this.mostrarModal(
-            `Tem certeza que deseja excluir todos os ${this.registros.length} registros? Esta ação não pode ser desfeita.`,
-            () => this.limparTodosRegistros()
-        );
-    }
-    
-    limparTodosRegistros() {
-        this.registros = [];
-        this.salvarRegistros();
-        this.aplicarFiltros();
-        this.atualizarDashboard();
-        this.mostrarNotificacao('Todos os registros foram excluídos', 'success');
-    }
-    
-    // CORREÇÃO: Edição de registros
-    editarRegistro(id) {
-    const registro = this.registros.find(r => r.id === id);
-    if (!registro) {
-        this.mostrarNotificacao('Registro não encontrado', 'error');
-        return;
-    }
-    
-    if (registro.tipo === 'normal') {
-        this.mostrarAba('weighing');
-        
-        // Limpar formulário primeiro
-        this.limparFormularioPesagem();
-        
-        // Setar modo de edição
-        this.editandoRegistroId = id;
-        this.mostrarBotoesEdicao();
-        
-        // Selecionar o produto
-        const produto = this.produtos.find(p => p.CÓDIGO === registro.codigo);
-        if (produto) {
-            this.produtoSelecionado = produto;
-            const container = document.getElementById('selected-product');
-            container.innerHTML = `
-                <div class="product-selected-info">
-                    <div class="product-info">
-                        <h3>${produto.PRODUTO} (EDITANDO)</h3>
-                        <p><i class="fas fa-pencil-alt"></i> Editando registro existente</p>
-                    </div>
-                    <div class="product-code">Código: ${produto.CÓDIGO}</div>
-                </div>
-            `;
-            container.classList.add('active');
-        }
-        
-        // Preencher campos com os dados existentes
-        document.getElementById('tara').value = registro.tara || 0.500;
-        document.getElementById('bruto').value = registro.bruto || 0;
-        document.getElementById('valor-kg').value = registro.valorKg || 25.50;
-        this.calcularPesoLiquido();
-        
-    } else {
-        this.mostrarAba('remanejamento');
-        
-        // Resetar primeiro
-        this.resetarRemanejamento();
-        
-        // Setar modo de edição
-        this.editandoRemanejamentoId = id;
-        document.getElementById('submit-remanejamento').textContent = 'Salvar Edição';
-        
-        // Preencher dados do remanejamento
-        const produto = this.produtos.find(p => p.CÓDIGO === registro.codigo);
-        if (produto) {
-            this.produtoRemanejamento = produto;
-            this.tipoRemanejamento = registro.tipo;
-            this.destinoRemanejamento = registro.destino;
-            
-            // Atualizar UI - primeiro mostrar o produto selecionado
-            const container = document.getElementById('remanejamento-selected');
-            container.innerHTML = `
-                <div class="product-selected-info">
-                    <div class="product-info">
-                        <h3>${produto.PRODUTO} (EDITANDO)</h3>
-                        <p><i class="fas fa-pencil-alt"></i> Editando registro de remanejamento</p>
-                    </div>
-                    <div class="product-code">Código: ${produto.CÓDIGO}</div>
-                </div>
-            `;
-            container.classList.add('active');
-            
-            // Selecionar tipo correspondente
-            setTimeout(() => {
-                document.querySelectorAll('.option-card').forEach(card => {
-                    const tipo = card.getAttribute('data-tipo');
-                    const destino = card.getAttribute('data-destino');
-                    
-                    if (registro.tipo === 'perda' && tipo === 'perda') {
-                        card.classList.add('active');
-                    } else if (registro.tipo === 'sobra' && destino === registro.destino) {
-                        card.classList.add('active');
-                    }
-                });
-                
-                // Ir para o passo 3
-                this.mostrarPasso(3);
-                this.atualizarInfoRemanejamento();
-                
-                // Preencher campos
-                document.getElementById('peso-inicial').value = registro.pesoInicial || 0;
-                document.getElementById('peso-final').value = registro.pesoFinal || 0;
-                document.getElementById('valor-origem').value = registro.valorOrigem || 0;
-                document.getElementById('valor-destino').value = registro.valorDestino || 0;
-                document.getElementById('observacoes').value = registro.observacoes || '';
-                
-                this.calcularRemanejamento();
-            }, 100);
-        }
-    }
-    
-    this.mostrarNotificacao('Editando registro existente. As alterações serão salvas no registro original.', 'warning');
+
+function applyReportFilters() {
+    // Implementar filtros avançados para relatórios
+    showNotification('Filtros aplicados com sucesso', 'success');
+    loadReports();
 }
+
+function clearReportFilters() {
+    document.getElementById('report-start-date').value = '';
+    document.getElementById('report-end-date').value = '';
+    document.getElementById('report-product-name').value = '';
+    document.getElementById('report-product-code').value = '';
+    document.getElementById('report-type').selectedIndex = 0;
     
-    atualizarDashboard() {
-        const hoje = moment().startOf('day');
-        const registrosHoje = this.registros.filter(registro => 
-            moment(registro.data).isSameOrAfter(hoje)
-        );
-        
-        // Calcular estatísticas
-        const producaoNormal = registrosHoje.filter(r => r.tipo === 'normal');
-        const producaoSobra = registrosHoje.filter(r => r.tipo === 'sobra');
-        const producaoPerda = registrosHoje.filter(r => r.tipo === 'perda');
-        
-        // Totais do dia
-        const totalKg = producaoNormal.reduce((sum, r) => sum + r.liquido, 0);
-        const totalValor = producaoNormal.reduce((sum, r) => sum + r.valorTotal, 0);
-        
-        // Perdas do dia
-        const totalPerdaKg = producaoPerda.reduce((sum, r) => sum + r.pesoInicial, 0);
-        const totalPerdaValor = producaoPerda.reduce((sum, r) => sum + r.prejuizo, 0);
-        
-        // Sobras transformadas
-        const totalSobraKg = producaoSobra.reduce((sum, r) => sum + r.pesoInicial, 0);
-        
-        // Estatísticas
-        const produtosUnicos = [...new Set(producaoNormal.map(r => r.codigo))].length;
-        
-        // Última atividade
-        const ultimaAtividade = registrosHoje[0];
-        
-        // Atualizar valores no dashboard
-        document.getElementById('daily-total').textContent = totalKg.toFixed(3) + ' kg';
-        document.getElementById('daily-value').textContent = 
-            totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        
-        document.getElementById('daily-items').textContent = produtosUnicos;
-        
-        document.getElementById('daily-loss').textContent = totalPerdaKg.toFixed(3) + ' kg';
-        document.getElementById('loss-value').textContent = 
-            totalPerdaValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        
-        if (ultimaAtividade) {
-            document.getElementById('last-weighing').textContent = 
-                moment(ultimaAtividade.data).locale('pt-br').format('HH:mm');
-            document.getElementById('last-product').textContent = ultimaAtividade.produto;
-        } else {
-            document.getElementById('last-weighing').textContent = '--:--';
-            document.getElementById('last-product').textContent = 'Nenhuma ainda';
+    loadReports();
+}
+
+function updateReportDetails() {
+    const tbody = document.getElementById('report-details');
+    
+    // Agrupar produção por produto
+    const productionByProduct = {};
+    
+    productionRecords.forEach(record => {
+        if (!productionByProduct[record.productCode]) {
+            productionByProduct[record.productCode] = {
+                name: record.productName,
+                code: record.productCode,
+                production: 0,
+                waste: 0,
+                loss: 0,
+                value: 0,
+                lossValue: 0
+            };
         }
         
-        // Atualizar totais no cabeçalho
-        document.getElementById('total-today').textContent = totalKg.toFixed(3) + ' kg';
-        document.getElementById('total-loss').textContent = totalPerdaKg.toFixed(3) + ' kg';
-        
-        // Atualizar atividade recente
-        this.atualizarAtividadeRecente(registrosHoje.slice(0, 5));
-        
-        // Atualizar gráficos do dashboard
-        this.atualizarGraficosDashboard(producaoNormal, producaoSobra, producaoPerda);
-    }
+        productionByProduct[record.productCode].production += record.netWeight;
+        productionByProduct[record.productCode].value += record.totalValue;
+    });
     
-    atualizarAtividadeRecente(registros) {
-        const container = document.getElementById('recent-activity');
-        
-        if (registros.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-clipboard-list"></i>
-                    <p>Nenhuma atividade registrada hoje</p>
-                </div>
-            `;
-            return;
-        }
-        
-        container.innerHTML = registros.map(registro => {
-            let icon = 'fa-weight-hanging';
-            let tipoText = 'Produção';
-            let valorText = '';
-            let pesoText = '';
-            
-            if (registro.tipo === 'normal') {
-                icon = 'fa-check-circle';
-                pesoText = `${registro.liquido.toFixed(3)} kg`;
-                valorText = registro.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-            } else if (registro.tipo === 'sobra') {
-                icon = 'fa-recycle';
-                tipoText = 'Transformação';
-                pesoText = `${registro.pesoInicial.toFixed(3)}kg → ${registro.pesoFinal.toFixed(3)}kg`;
-                valorText = `Prejuízo: ${registro.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
-            } else {
-                icon = 'fa-exclamation-triangle';
-                tipoText = 'Perda';
-                pesoText = `${registro.pesoInicial.toFixed(3)} kg`;
-                valorText = `Prejuízo: ${registro.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
-            }
-            
-            return `
-                <div class="activity-item">
-                    <div class="activity-info">
-                        <h4>${registro.produto}</h4>
-                        <p>
-                            <i class="fas ${icon}"></i>
-                            ${tipoText} • ${moment(registro.data).locale('pt-br').format('HH:mm')}
-                        </p>
-                    </div>
-                    <div class="activity-values">
-                        <div class="weight">${pesoText}</div>
-                        <div class="value">${valorText}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-    
-    atualizarGraficosDashboard(normal, sobra, perda) {
-        // Gráfico de produção vs perdas
-        const ctx1 = document.getElementById('productionLossChart');
-        if (ctx1) {
-            if (this.productionLossChart) {
-                this.productionLossChart.destroy();
-            }
-            
-            const totalProducao = normal.reduce((sum, r) => sum + r.liquido, 0);
-            const totalSobras = sobra.reduce((sum, r) => sum + r.pesoInicial, 0);
-            const totalPerdas = perda.reduce((sum, r) => sum + r.pesoInicial, 0);
-            
-            this.productionLossChart = new Chart(ctx1, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Produção', 'Sobras', 'Perdas'],
-                    datasets: [{
-                        data: [totalProducao, totalSobras, totalPerdas],
-                        backgroundColor: ['#27ae60', '#3498db', '#e74c3c'],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${context.parsed.toFixed(3)} kg`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-        
-        // Gráfico top 5 produtos hoje
-        const ctx2 = document.getElementById('topProductsTodayChart');
-        if (ctx2) {
-            if (this.topProductsTodayChart) {
-                this.topProductsTodayChart.destroy();
-            }
-            
-            // Agrupar produção normal por produto
-            const produtosAgrupados = {};
-            normal.forEach(registro => {
-                if (!produtosAgrupados[registro.produto]) {
-                    produtosAgrupados[registro.produto] = 0;
-                }
-                produtosAgrupados[registro.produto] += registro.liquido;
-            });
-            
-            const top5 = Object.entries(produtosAgrupados)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 5);
-            
-            if (top5.length > 0) {
-                this.topProductsTodayChart = new Chart(ctx2, {
-                    type: 'bar',
-                    data: {
-                        labels: top5.map(p => p[0].length > 15 ? p[0].substring(0, 15) + '...' : p[0]),
-                        datasets: [{
-                            label: 'Peso (kg)',
-                            data: top5.map(p => p[1]),
-                            backgroundColor: '#3498db',
-                            borderColor: '#2980b9',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Peso (kg)'
-                                }
-                            }
-                        },
-                        plugins: {
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        return `Peso: ${context.parsed.y.toFixed(3)} kg`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
+    // Adicionar sobras e perdas
+    wasteRecords.forEach(record => {
+        if (productionByProduct[record.productCode]) {
+            if (record.type === 'sobra') {
+                productionByProduct[record.productCode].waste += record.quantity;
+            } else if (record.type === 'perda') {
+                productionByProduct[record.productCode].loss += record.quantity;
+                productionByProduct[record.productCode].lossValue += record.quantity * (record.pricePerKg || 0);
             }
         }
-    }
+    });
     
-    // CORREÇÃO: Método de gerar relatório
-    gerarRelatorio() {
-        this.aplicarFiltrosAvancados();
-    }
+    tbody.innerHTML = '';
     
-    gerarRelatorioDetalhado(registros) {
-        const tbody = document.getElementById('detailed-body');
-        
-        if (registros.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="empty-table">
-                        <i class="fas fa-chart-bar"></i>
-                        Nenhum registro encontrado no período selecionado
-                    </td>
-                </tr>
-            `;
-            
-            // Resetar totais do relatório
-            document.getElementById('report-total-kg').textContent = '0 kg';
-            document.getElementById('report-total-value').textContent = 'R$ 0,00';
-            document.getElementById('report-total-loss').textContent = '0 kg';
-            document.getElementById('report-loss-value').content = 'R$ 0,00';
-            
-            return;
-        }
-        
-        // Agrupar por produto e tipo para exibição INDIVIDUAL
-        const produtosAgrupados = {};
-        
-        registros.forEach(registro => {
-            const chave = `${registro.codigo}-${registro.produto}`;
-            
-            if (!produtosAgrupados[chave]) {
-                produtosAgrupados[chave] = {
-                    produto: registro.produto,
-                    codigo: registro.codigo,
-                    registros: [],
-                    producao: 0,
-                    sobras: 0,
-                    perdas: 0,
-                    valorTotal: 0,
-                    prejuizoTotal: 0
-                };
-            }
-            
-            produtosAgrupados[chave].registros.push(registro);
-            
-            if (registro.tipo === 'normal') {
-                produtosAgrupados[chave].producao += registro.liquido;
-                produtosAgrupados[chave].valorTotal += registro.valorTotal;
-            } else if (registro.tipo === 'sobra') {
-                produtosAgrupados[chave].sobras += registro.pesoInicial;
-                produtosAgrupados[chave].prejuizoTotal += registro.prejuizo;
-            } else if (registro.tipo === 'perda') {
-                produtosAgrupados[chave].perdas += registro.pesoInicial;
-                produtosAgrupados[chave].prejuizoTotal += registro.prejuizo;
-            }
-        });
-        
-        // Converter para array e calcular eficiência
-        const produtosArray = Object.values(produtosAgrupados);
-        produtosArray.forEach(prod => {
-            const total = prod.producao + prod.sobras + prod.perdas;
-            prod.eficiencia = total > 0 ? (prod.producao / total) * 100 : 0;
-        });
-        
-        // Ordenar por produção (decrescente)
-        produtosArray.sort((a, b) => b.producao - a.producao);
-        
-        // Calcular totais para exibição no resumo
-        const totalProducao = produtosArray.reduce((sum, prod) => sum + prod.producao, 0);
-        const totalValor = produtosArray.reduce((sum, prod) => sum + prod.valorTotal, 0);
-        const totalPerdas = produtosArray.reduce((sum, prod) => sum + prod.perdas, 0);
-        const totalPrejuizo = produtosArray.reduce((sum, prod) => sum + prod.prejuizoTotal, 0);
-        
-        // Atualizar totais no resumo
-        document.getElementById('report-total-kg').textContent = totalProducao.toFixed(3) + ' kg';
-        document.getElementById('report-total-value').textContent = 
-            totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        document.getElementById('report-total-loss').textContent = totalPerdas.toFixed(3) + ' kg';
-        document.getElementById('report-loss-value').textContent = 
-            totalPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        
-        // Gerar tabela com dados INDIVIDUAIS
-        tbody.innerHTML = produtosArray.map(prod => {
-            const eficienciaClass = prod.eficiencia >= 80 ? 'high' : 
-                                  prod.eficiencia >= 60 ? 'medium' : 'low';
-            
-            // Determinar tipo principal (o mais frequente)
-            const tipos = prod.registros.map(r => r.tipo);
-            const tipoPrincipal = tipos.reduce((a, b, i, arr) => 
-                arr.filter(v => v === a).length >= arr.filter(v => v === b).length ? a : b, tipos[0] || 'normal');
-            
-            const tipoText = tipoPrincipal === 'normal' ? 'Normal' : 
-                           tipoPrincipal === 'sobra' ? 'Sobra' : 'Perda';
-            
-            return `
-                <tr>
-                    <td>${prod.produto}</td>
-                    <td>${prod.codigo}</td>
-                    <td>${tipoText}</td>
-                    <td>${prod.producao.toFixed(3)}</td>
-                    <td>${prod.sobras.toFixed(3)}</td>
-                    <td>${prod.perdas.toFixed(3)}</td>
-                    <td>${prod.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td>${prod.prejuizoTotal > 0 ? prod.prejuizoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}</td>
-                    <td><span class="efficiency-badge ${eficienciaClass}">${prod.eficiencia.toFixed(1)}%</span></td>
-                </tr>
-            `;
-        }).join('');
-    }
-    
-    gerarGraficosRelatorio(registros, inicio, fim) {
-        // Gráfico de distribuição por tipo
-        const ctx1 = document.getElementById('typeDistributionChart');
-        if (ctx1) {
-            if (this.typeDistributionChart) {
-                this.typeDistributionChart.destroy();
-            }
-            
-            const normal = registros.filter(r => r.tipo === 'normal');
-            const sobra = registros.filter(r => r.tipo === 'sobra');
-            const perda = registros.filter(r => r.tipo === 'perda');
-            
-            const totalNormal = normal.reduce((sum, r) => sum + (r.liquido || r.pesoInicial || 0), 0);
-            const totalSobra = sobra.reduce((sum, r) => sum + (r.pesoInicial || 0), 0);
-            const totalPerda = perda.reduce((sum, r) => sum + (r.pesoInicial || 0), 0);
-            
-            this.typeDistributionChart = new Chart(ctx1, {
-                type: 'pie',
-                data: {
-                    labels: ['Produção Normal', 'Sobras', 'Perdas'],
-                    datasets: [{
-                        data: [totalNormal, totalSobra, totalPerda],
-                        backgroundColor: ['#27ae60', '#3498db', '#e74c3c'],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'right'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${context.parsed.toFixed(3)} kg`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-        
-        // Gráfico de evolução diária
-        const ctx2 = document.getElementById('dailyEvolutionChart');
-        if (ctx2) {
-            if (this.dailyEvolutionChart) {
-                this.dailyEvolutionChart.destroy();
-            }
-            
-            // Agrupar por dia
-            const dadosPorDia = {};
-            const dias = [];
-            let dataAtual = inicio.clone();
-            
-            while (dataAtual.isSameOrBefore(fim, 'day')) {
-                const diaStr = dataAtual.format('DD/MM');
-                dias.push(diaStr);
-                dadosPorDia[diaStr] = { producao: 0, perdas: 0 };
-                dataAtual.add(1, 'day');
-            }
-            
-            // Preencher dados
-            registros.forEach(registro => {
-                const diaStr = moment(registro.data).format('DD/MM');
-                if (dadosPorDia[diaStr]) {
-                    if (registro.tipo === 'normal') {
-                        dadosPorDia[diaStr].producao += registro.liquido || 0;
-                    } else if (registro.tipo === 'perda') {
-                        dadosPorDia[diaStr].perdas += registro.pesoInicial || 0;
-                    }
-                }
-            });
-            
-            this.dailyEvolutionChart = new Chart(ctx2, {
-                type: 'line',
-                data: {
-                    labels: dias,
-                    datasets: [
-                        {
-                            label: 'Produção (kg)',
-                            data: dias.map(dia => dadosPorDia[dia].producao),
-                            borderColor: '#27ae60',
-                            backgroundColor: 'rgba(39, 174, 96, 0.1)',
-                            fill: true,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'Perdas (kg)',
-                            data: dias.map(dia => dadosPorDia[dia].perdas),
-                            borderColor: '#e74c3c',
-                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                            fill: true,
-                            tension: 0.4
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Peso (kg)'
-                            }
-                        }
-                    },
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} kg`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-    }
-    
-  
-async gerarPDF() {
-    const inicio = document.getElementById('advanced-start').value;
-    const fim = document.getElementById('advanced-end').value;
-    const tipoRelatorio = document.getElementById('filter-tipo-detalhado').value;
-    const nomeProduto = document.getElementById('filter-product-name').value;
-    const codigoProduto = document.getElementById('filter-product-code').value;
-    
-    if (!inicio || !fim) {
-        this.mostrarNotificacao('Selecione um período válido para gerar o PDF', 'error');
+    const products = Object.values(productionByProduct);
+    if (products.length === 0) {
+        tbody.innerHTML = `
+            <tr class="no-data-row">
+                <td colspan="9">Nenhum dado para exibir no período selecionado</td>
+            </tr>
+        `;
         return;
     }
     
-    // Filtrar registros pelo período
-    let registrosPeriodo = [...this.registros];
-    
-    // Filtrar por período
-    if (inicio && fim) {
-        const dataInicio = moment(inicio).startOf('day');
-        const dataFim = moment(fim).endOf('day');
+    products.forEach(product => {
+        const efficiency = product.production > 0 
+            ? ((product.production - product.loss) / product.production * 100).toFixed(1)
+            : '0.0';
         
-        registrosPeriodo = registrosPeriodo.filter(registro => {
-            const dataRegistro = moment(registro.data);
-            return dataRegistro.isBetween(dataInicio, dataFim, null, '[]');
-        });
-    }
-    
-    // Aplicar todos os filtros
-    if (tipoRelatorio !== 'all') {
-        registrosPeriodo = registrosPeriodo.filter(registro => registro.tipo === tipoRelatorio);
-    }
-    
-    if (nomeProduto) {
-        registrosPeriodo = registrosPeriodo.filter(registro => 
-            registro.produto.toLowerCase().includes(nomeProduto.toLowerCase())
-        );
-    }
-    
-    if (codigoProduto) {
-        registrosPeriodo = registrosPeriodo.filter(registro => 
-            registro.codigo.toString().includes(codigoProduto)
-        );
-    }
-    
-    if (registrosPeriodo.length === 0) {
-        this.mostrarNotificacao('Nenhum registro encontrado no período para gerar PDF', 'warning');
-        return;
-    }
-    
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${product.name}</td>
+            <td>${product.code}</td>
+            <td>Produção</td>
+            <td>${product.production.toFixed(3)}</td>
+            <td>${product.waste.toFixed(3)}</td>
+            <td>${product.loss.toFixed(3)}</td>
+            <td>R$ ${product.value.toFixed(2)}</td>
+            <td>R$ ${product.lossValue.toFixed(2)}</td>
+            <td>${efficiency}%</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Função exportToPDF (VERSÃO CORRIGIDA)
+// Função exportToPDF (VERSÃO SIMPLIFICADA E ORGANIZADA)
+function exportToPDF() {
     try {
-        // Carregar a biblioteca jsPDF
+        // Coletar dados
+        const startDate = document.getElementById('report-start-date').value || new Date().toISOString().split('T')[0];
+        const endDate = document.getElementById('report-end-date').value || new Date().toISOString().split('T')[0];
+        
         const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('landscape');
         
-        // ALTERAÇÃO PRINCIPAL: Mude 'p' (portrait) para 'l' (landscape)
-        const doc = new jsPDF('l', 'pt', 'a4');
-        
-        // Obter dimensões da página em paisagem
+        // Configurações básicas
+        const margin = 15;
         const pageWidth = doc.internal.pageSize.width;
-        const pageHeight = doc.internal.pageSize.height;
+        const contentWidth = pageWidth - (2 * margin);
         
-        let yPos = 50;
-        
-        // Cabeçalho profissional - ajustado para paisagem
-        doc.setFontSize(24);
-        doc.setTextColor(30, 30, 30);
-        doc.setFont('helvetica', 'bold');
-        
-        // Centralizar título no layout paisagem
-        const title = 'RELATÓRIO DE PRODUÇÃO - POR PRODUTO';
-        const titleWidth = doc.getStringUnitWidth(title) * doc.internal.getFontSize() / doc.internal.scaleFactor;
-        const titleX = (pageWidth - titleWidth) / 2;
-        doc.text(title, titleX, yPos);
-        yPos += 35;
-        
-        // Linha decorativa - ajustada para largura maior do paisagem
-        doc.setDrawColor(41, 98, 255);
-        doc.setLineWidth(2);
-        doc.line(40, yPos, pageWidth - 40, yPos);
-        yPos += 20;
-        
-        // Informações do período - mais espaço para texto
-        doc.setFontSize(11);
-        doc.setTextColor(100, 100, 100);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Período: ${moment(inicio).locale('pt-br').format('DD/MM/YYYY')} até ${moment(fim).locale('pt-br').format('DD/MM/YYYY')}`, 40, yPos);
-        doc.text(`Gerado em: ${moment().locale('pt-br').format('DD/MM/YYYY HH:mm')}`, pageWidth - 200, yPos);
-        yPos += 30;
-        
-        // Agrupar registros por produto para resumo individual
-        const produtosAgrupados = {};
-        
-        registrosPeriodo.forEach(registro => {
-            const chave = `${registro.codigo}-${registro.produto}`;
-            
-            if (!produtosAgrupados[chave]) {
-                produtosAgrupados[chave] = {
-                    produto: registro.produto,
-                    codigo: registro.codigo,
-                    producaoNormal: [],
-                    producaoSobras: [],
-                    producaoPerdas: [],
-                    totalProducao: 0,
-                    totalProducaoValor: 0,
-                    totalSobras: 0,
-                    totalSobrasPrejuizo: 0,
-                    totalPerdas: 0,
-                    totalPerdasPrejuizo: 0
-                };
+        // FUNÇÕES AUXILIARES
+        const formatDate = (dateString) => {
+            try {
+                return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR');
+            } catch {
+                return dateString;
             }
-            
-            if (registro.tipo === 'normal') {
-                produtosAgrupados[chave].producaoNormal.push(registro);
-                produtosAgrupados[chave].totalProducao += registro.liquido || 0;
-                produtosAgrupados[chave].totalProducaoValor += registro.valorTotal || 0;
-            } else if (registro.tipo === 'sobra') {
-                produtosAgrupados[chave].producaoSobras.push(registro);
-                produtosAgrupados[chave].totalSobras += registro.pesoInicial || 0;
-                produtosAgrupados[chave].totalSobrasPrejuizo += registro.prejuizo || 0;
-            } else if (registro.tipo === 'perda') {
-                produtosAgrupados[chave].producaoPerdas.push(registro);
-                produtosAgrupados[chave].totalPerdas += registro.pesoInicial || 0;
-                produtosAgrupados[chave].totalPerdasPrejuizo += registro.prejuizo || 0;
-            }
-        });
+        };
         
-        // Calcular totais gerais para o relatório
-        const totalGeralProducao = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalProducao, 0);
-        const totalGeralProducaoValor = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalProducaoValor, 0);
-        const totalGeralSobras = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalSobras, 0);
-        const totalGeralPerdas = Object.values(produtosAgrupados).reduce((sum, prod) => sum + prod.totalPerdas, 0);
-        const totalGeralPrejuizo = Object.values(produtosAgrupados).reduce((sum, prod) => 
-            sum + prod.totalSobrasPrejuizo + prod.totalPerdasPrejuizo, 0);
+        const safeNumber = (value) => parseFloat(value) || 0;
         
-        // Calcular eficiência média
-        const eficienciaMedia = Object.values(produtosAgrupados).reduce((sum, prod) => {
-            const pesoTotal = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
-            return sum + (pesoTotal > 0 ? (prod.totalProducao / pesoTotal) * 100 : 0);
-        }, 0) / (Object.keys(produtosAgrupados).length || 1);
+        // Página 1: Cabeçalho
+        doc.setFontSize(20);
+        doc.setTextColor(40, 40, 40);
+        doc.text('RELATÓRIO DE PRODUÇÃO', pageWidth / 2, 25, { align: 'center' });
         
-        // RESULTADO GERAL (visão rápida) - ajustado para paisagem
         doc.setFontSize(14);
-        doc.setTextColor(30, 30, 30);
-        doc.setFont('helvetica', 'bold');
-        doc.text('RESULTADO GERAL DO PERÍODO', 40, yPos);
-        yPos += 20;
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Período: ${formatDate(startDate)} a ${formatDate(endDate)}`, pageWidth / 2, 35, { align: 'center' });
         
-        // Quadro de resultado geral - largura maior em paisagem
-        const quadroWidth = pageWidth - 80;
-        doc.setFillColor(245, 247, 255);
-        doc.rect(40, yPos, quadroWidth, 50, 'F');
+        const now = new Date();
+        const dataGeracao = now.toLocaleDateString('pt-BR');
+        const horaGeracao = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        doc.setFontSize(10);
+        doc.text(`Gerado em: ${dataGeracao} às ${horaGeracao}`, pageWidth / 2, 42, { align: 'center' });
+        
+        // Adicionar linha divisória
         doc.setDrawColor(200, 200, 200);
-        doc.rect(40, yPos, quadroWidth, 50);
+        doc.line(margin, 50, pageWidth - margin, 50);
         
-        doc.setFontSize(11);
-        doc.setTextColor(100, 100, 100);
-        doc.setFont('helvetica', 'normal');
-        
-        // Dividir em 4 colunas para melhor aproveitamento do espaço horizontal
-        const colWidth = quadroWidth / 4;
-        
-        // Coluna 1: Produção
-        doc.text('Total Produção:', 50, yPos + 20);
-        doc.text('Valor Total:', 50, yPos + 35);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(30, 30, 30);
-        doc.text(`${totalGeralProducao.toFixed(3)} kg`, 150, yPos + 20);
-        doc.text(totalGeralProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 150, yPos + 35);
-        
-        // Coluna 2: Sobras e Perdas
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
-        doc.text('Total Sobras:', 40 + colWidth, yPos + 20);
-        doc.text('Total Perdas:', 40 + colWidth, yPos + 35);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(30, 30, 30);
-        doc.text(`${totalGeralSobras.toFixed(3)} kg`, 40 + colWidth + 100, yPos + 20);
-        doc.text(`${totalGeralPerdas.toFixed(3)} kg`, 40 + colWidth + 100, yPos + 35);
-        
-        // Coluna 3: Prejuízo e Produtos
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
-        doc.text('Prejuízo Total:', 40 + (colWidth * 2), yPos + 20);
-        doc.text('Produtos Analisados:', 40 + (colWidth * 2), yPos + 35);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(231, 76, 60);
-        doc.text(totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 40 + (colWidth * 2) + 100, yPos + 20);
-        doc.setTextColor(30, 30, 30);
-        doc.text(Object.keys(produtosAgrupados).length.toString(), 40 + (colWidth * 2) + 100, yPos + 35);
-        
-        // Coluna 4: Eficiência Média
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
-        doc.text('Eficiência Média:', 40 + (colWidth * 3), yPos + 20);
-        
-        doc.setFont('helvetica', 'bold');
-        if (eficienciaMedia >= 80) {
-            doc.setTextColor(39, 174, 96);
-        } else if (eficienciaMedia >= 60) {
-            doc.setTextColor(241, 196, 15);
-        } else {
-            doc.setTextColor(231, 76, 60);
-        }
-        doc.text(`${eficienciaMedia.toFixed(1)}%`, 40 + (colWidth * 3) + 100, yPos + 20);
-        
-        yPos += 70;
-        
-        // Agora, para cada produto individualmente
-        Object.values(produtosAgrupados).forEach((prod, index) => {
-            // Verificar se precisa de nova página - altura menor em paisagem
-            if (yPos > 500) {
-                doc.addPage('l', 'a4'); // Nova página também em paisagem
-                yPos = 50;
-            }
-            
-            // Título do produto
-            doc.setFontSize(16);
-            doc.setTextColor(41, 98, 255);
-            doc.setFont('helvetica', 'bold');
-            
-            // Truncar nome do produto se muito longo
-            let produtoNome = prod.produto;
-            if (produtoNome.length > 60) {
-                produtoNome = produtoNome.substring(0, 57) + '...';
-            }
-            doc.text(`${produtoNome} (Código: ${prod.codigo})`, 40, yPos);
-            yPos += 25;
-            
-            // Resumo individual do produto
-            doc.setFontSize(12);
-            doc.setTextColor(30, 30, 30);
-            doc.setFont('helvetica', 'bold');
-            doc.text('RESUMO DO PRODUTO:', 40, yPos);
-            yPos += 20;
-            
-            // Quadro de resumo individual - largura maior
-            doc.setFillColor(248, 249, 250);
-            doc.rect(40, yPos, quadroWidth, 60, 'F');
-            doc.setDrawColor(200, 200, 200);
-            doc.rect(40, yPos, quadroWidth, 60);
-            
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            
-            // Calcular eficiência do produto
-            const pesoTotalProd = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
-            const eficienciaProd = pesoTotalProd > 0 ? (prod.totalProducao / pesoTotalProd) * 100 : 0;
-            
-            // Linha 1: Produção e Valor
-            doc.setTextColor(100, 100, 100);
-            doc.text('Produção Normal:', 50, yPos + 20);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(30, 30, 30);
-            doc.text(`${prod.totalProducao.toFixed(3)} kg`, 150, yPos + 20);
-            
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text('Valor Total:', 250, yPos + 20);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(39, 174, 96);
-            doc.text(prod.totalProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 320, yPos + 20);
-            
-            // Linha 2: Sobras
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text('Sobras Transformadas:', 50, yPos + 35);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(30, 30, 30);
-            doc.text(`${prod.totalSobras.toFixed(3)} kg`, 150, yPos + 35);
-            
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text('Prejuízo Sobras:', 250, yPos + 35);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(52, 152, 219);
-            doc.text(prod.totalSobrasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 320, yPos + 35);
-            
-            // Linha 3: Perdas
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text('Perdas/Descartes:', 50, yPos + 50);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(30, 30, 30);
-            doc.text(`${prod.totalPerdas.toFixed(3)} kg`, 150, yPos + 50);
-            
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text('Prejuízo Perdas:', 250, yPos + 50);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(231, 76, 60);
-            doc.text(prod.totalPerdasPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 320, yPos + 50);
-            
-            // Eficiência do produto
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text('Eficiência:', 450, yPos + 35);
-            doc.setFont('helvetica', 'bold');
-            
-            // Cor da eficiência baseada no valor
-            if (eficienciaProd >= 80) {
-                doc.setTextColor(39, 174, 96);
-            } else if (eficienciaProd >= 60) {
-                doc.setTextColor(241, 196, 15);
-            } else {
-                doc.setTextColor(231, 76, 60);
-            }
-            
-            doc.text(`${eficienciaProd.toFixed(1)}%`, 520, yPos + 35);
-            
-            yPos += 80;
-            
-            // Detalhamento da Produção Normal (se houver)
-            if (prod.producaoNormal.length > 0) {
-                doc.setFontSize(12);
-                doc.setTextColor(39, 174, 96);
-                doc.setFont('helvetica', 'bold');
-                doc.text('DETALHAMENTO DA PRODUÇÃO NORMAL:', 40, yPos);
-                yPos += 20;
-                
-                const headersProducao = [['Data', 'Peso Líq. (kg)', 'Valor/kg (R$)', 'Valor Total (R$)']];
-                const dataProducao = prod.producaoNormal.map(registro => [
-                    moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm'),
-                    registro.liquido.toFixed(3),
-                    registro.valorKg.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                    registro.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                ]);
-                
-                doc.autoTable({
-                    startY: yPos,
-                    head: headersProducao,
-                    body: dataProducao,
-                    theme: 'striped',
-                    headStyles: {
-                        fillColor: [39, 174, 96],
-                        textColor: [255, 255, 255],
-                        fontSize: 9,
-                        fontStyle: 'bold'
-                    },
-                    bodyStyles: {
-                        fontSize: 8
-                    },
-                    margin: { left: 40, right: 40 },
-                    tableWidth: 'auto',
-                    styles: {
-                        overflow: 'linebreak',
-                        cellPadding: 3
-                    }
-                });
-                
-                yPos = doc.lastAutoTable.finalY + 20;
-            }
-            
-            // Detalhamento das Sobras (se houver)
-            if (prod.producaoSobras.length > 0) {
-                doc.setFontSize(12);
-                doc.setTextColor(52, 152, 219);
-                doc.setFont('helvetica', 'bold');
-                doc.text('TRANSFORMAÇÕES DE SOBRAS:', 40, yPos);
-                yPos += 20;
-                
-                const headersSobras = [['Data', 'Peso Inicial (kg)', 'Destino', 'Peso Final (kg)', 'Prejuízo (R$)']];
-                const dataSobras = prod.producaoSobras.map(registro => [
-                    moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm'),
-                    registro.pesoInicial.toFixed(3),
-                    registro.destino === 'farinha' ? 'Farinha de Rosca' : 'Torrada Simples',
-                    registro.pesoFinal.toFixed(3),
-                    registro.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                ]);
-                
-                doc.autoTable({
-                    startY: yPos,
-                    head: headersSobras,
-                    body: dataSobras,
-                    theme: 'striped',
-                    headStyles: {
-                        fillColor: [52, 152, 219],
-                        textColor: [255, 255, 255],
-                        fontSize: 9,
-                        fontStyle: 'bold'
-                    },
-                    bodyStyles: {
-                        fontSize: 8
-                    },
-                    margin: { left: 40, right: 40 },
-                    tableWidth: 'auto',
-                    styles: {
-                        overflow: 'linebreak',
-                        cellPadding: 3
-                    }
-                });
-                
-                yPos = doc.lastAutoTable.finalY + 20;
-            }
-            
-            // Detalhamento das Perdas (se houver)
-            if (prod.producaoPerdas.length > 0) {
-                doc.setFontSize(12);
-                doc.setTextColor(231, 76, 60);
-                doc.setFont('helvetica', 'bold');
-                doc.text('PERDAS E DESCARTES:', 40, yPos);
-                yPos += 20;
-                
-                const headersPerdas = [['Data', 'Peso Perdido (kg)', 'Valor Perdido (R$)', 'Observações']];
-                const dataPerdas = prod.producaoPerdas.map(registro => [
-                    moment(registro.data).locale('pt-br').format('DD/MM/YYYY HH:mm'),
-                    registro.pesoInicial.toFixed(3),
-                    registro.prejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                    (registro.observacoes && registro.observacoes.length > 40) ? 
-                      registro.observacoes.substring(0, 37) + '...' : (registro.observacoes || '-')
-                ]);
-                
-                doc.autoTable({
-                    startY: yPos,
-                    head: headersPerdas,
-                    body: dataPerdas,
-                    theme: 'striped',
-                    headStyles: {
-                        fillColor: [231, 76, 60],
-                        textColor: [255, 255, 255],
-                        fontSize: 9,
-                        fontStyle: 'bold'
-                    },
-                    bodyStyles: {
-                        fontSize: 8
-                    },
-                    margin: { left: 40, right: 40 },
-                    tableWidth: 'auto',
-                    styles: {
-                        overflow: 'linebreak',
-                        cellPadding: 3
-                    }
-                });
-                
-                yPos = doc.lastAutoTable.finalY + 40;
-            }
-            
-            // Linha separadora entre produtos (exceto o último)
-            if (index < Object.values(produtosAgrupados).length - 1) {
-                doc.setDrawColor(200, 200, 200);
-                doc.setLineWidth(0.5);
-                doc.line(40, yPos, pageWidth - 40, yPos);
-                yPos += 20;
+        // RESUMO GERAL EM UMA TABELA SIMPLES
+        doc.autoTable({
+            startY: 55,
+            margin: { left: margin, right: margin },
+            head: [['RESUMO GERAL DO PERÍODO', '']],
+            body: [
+                ['Período Analisado:', `${formatDate(startDate)} a ${formatDate(endDate)}`],
+                ['Data de Geração:', `${dataGeracao} ${horaGeracao}`],
+                ['Total de Produtos Analisados:', productionRecords.length.toString()]
+            ],
+            theme: 'plain',
+            styles: {
+                fontSize: 11,
+                cellPadding: 6,
+                overflow: 'linebreak',
+                halign: 'left'
+            },
+            headStyles: {
+                fillColor: [52, 152, 219], // Azul
+                textColor: 255,
+                fontStyle: 'bold'
+            },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 100 },
+                1: { cellWidth: 'auto' }
             }
         });
         
-        // Adicionar página de análise final se houver múltiplos produtos
-        if (Object.keys(produtosAgrupados).length > 1) {
-            doc.addPage('l', 'a4'); // Página em paisagem
-            yPos = 50;
-            
-            doc.setFontSize(16);
-            doc.setTextColor(30, 30, 30);
-            doc.setFont('helvetica', 'bold');
-            
-            const analiseTitle = 'ANÁLISE COMPARATIVA ENTRE PRODUTOS';
-            const analiseTitleWidth = doc.getStringUnitWidth(analiseTitle) * doc.internal.getFontSize() / doc.internal.scaleFactor;
-            const analiseTitleX = (pageWidth - analiseTitleWidth) / 2;
-            doc.text(analiseTitle, analiseTitleX, yPos);
-            yPos += 30;
-            
-            // Tabela comparativa - mais colunas em paisagem
-            const headersComparacao = [['Produto', 'Produção (kg)', 'Valor (R$)', 'Sobras (kg)', 'Perdas (kg)', 'Prejuízo (R$)', 'Eficiência']];
-            
-            const dataComparacao = Object.values(produtosAgrupados).map(prod => {
-                const pesoTotal = prod.totalProducao + prod.totalSobras + prod.totalPerdas;
-                const eficiencia = pesoTotal > 0 ? (prod.totalProducao / pesoTotal) * 100 : 0;
-                
-                // Truncar nome do produto
-                let nomeProduto = prod.produto;
-                if (nomeProduto.length > 30) {
-                    nomeProduto = nomeProduto.substring(0, 27) + '...';
+        // PÁGINA 2+: PRODUTOS
+        let startY = doc.lastAutoTable.finalY + 15;
+        
+        // Agrupar produção por produto
+        const productionByProduct = {};
+        productionRecords
+            .filter(p => p.date >= startDate && p.date <= endDate)
+            .forEach(record => {
+                if (!productionByProduct[record.productCode]) {
+                    productionByProduct[record.productCode] = {
+                        name: record.productName,
+                        code: record.productCode,
+                        production: 0,
+                        value: 0,
+                        pricePerKg: record.pricePerKg || 0,
+                        records: []
+                    };
                 }
-                
-                return [
-                    nomeProduto,
-                    prod.totalProducao.toFixed(3),
-                    prod.totalProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                    prod.totalSobras.toFixed(3),
-                    prod.totalPerdas.toFixed(3),
-                    (prod.totalSobrasPrejuizo + prod.totalPerdasPrejuizo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                    `${eficiencia.toFixed(1)}%`
-                ];
+                productionByProduct[record.productCode].production += safeNumber(record.netWeight);
+                productionByProduct[record.productCode].value += safeNumber(record.totalValue);
+                productionByProduct[record.productCode].records.push(record);
             });
+        
+        // Processar cada produto
+        Object.values(productionByProduct).forEach((produto, index) => {
+            // Se não couber na página atual, cria nova página
+            if (startY > 250) {
+                doc.addPage('landscape');
+                startY = 20;
+            }
             
-            // Ordenar por produção (maior para menor)
-            dataComparacao.sort((a, b) => parseFloat(b[1]) - parseFloat(a[1]));
+            // TÍTULO DO PRODUTO
+            doc.setFontSize(16);
+            doc.setTextColor(60, 60, 60);
+            doc.text(`${produto.name} (Código: ${produto.code})`, margin, startY);
             
+            startY += 10;
+            
+            // LINHA DIVISÓRIA
+            doc.setDrawColor(220, 220, 220);
+            doc.line(margin, startY, pageWidth - margin, startY);
+            
+            startY += 10;
+            
+            // TABELA DE RESUMO DO PRODUTO
+            const transformacoes = reassignmentRecords.filter(r => 
+                r.originProductCode === produto.code && 
+                r.date >= startDate && r.date <= endDate
+            );
+            
+            const sobras = wasteRecords.filter(w => 
+                w.productCode === produto.code && 
+                w.type === 'sobra' && 
+                w.date >= startDate && w.date <= endDate
+            );
+            
+            const perdas = wasteRecords.filter(w => 
+                w.productCode === produto.code && 
+                w.type === 'perda' && 
+                w.date >= startDate && w.date <= endDate
+            );
+            
+            // Calcular valores
+            const totalSobras = sobras.reduce((sum, s) => sum + safeNumber(s.quantity), 0);
+            const totalPerdas = perdas.reduce((sum, p) => sum + safeNumber(p.quantity), 0);
+            const prejuizoSobras = transformacoes.reduce((sum, t) => sum + safeNumber(t.lossValue), 0);
+            const prejuizoPerdas = perdas.reduce((sum, p) => sum + (safeNumber(p.quantity) * safeNumber(p.pricePerKg || produto.pricePerKg)), 0);
+            
+            const producaoUtil = produto.production - totalSobras - totalPerdas;
+            const eficiencia = produto.production > 0 ? ((producaoUtil / produto.production) * 100).toFixed(1) : '100.0';
+            
+            // Tabela de Resumo
             doc.autoTable({
-                startY: yPos,
-                head: headersComparacao,
-                body: dataComparacao,
+                startY: startY,
+                margin: { left: margin, right: margin },
+                head: [['DESCRIÇÃO', 'VALOR']],
+                body: [
+                    ['Produção Normal:', `${produto.production.toFixed(3)} kg`],
+                    ['Valor Total:', `R$ ${produto.value.toFixed(2)}`],
+                    ['Eficiência:', `${eficiencia}%`],
+                    ['Valor por Kg:', `R$ ${produto.pricePerKg.toFixed(2)}`]
+                ],
                 theme: 'grid',
-                headStyles: {
-                    fillColor: [41, 98, 255],
-                    textColor: [255, 255, 255],
-                    fontSize: 9,
-                    fontStyle: 'bold'
-                },
-                bodyStyles: {
-                    fontSize: 8
-                },
-                margin: { left: 40, right: 40 },
                 styles: {
-                    cellPadding: 4,
+                    fontSize: 10,
+                    cellPadding: 5,
                     overflow: 'linebreak'
                 },
-                columnStyles: {
-                    0: { cellWidth: 120, halign: 'left' },
-                    1: { cellWidth: 80, halign: 'right' },
-                    2: { cellWidth: 90, halign: 'right' },
-                    3: { cellWidth: 80, halign: 'right' },
-                    4: { cellWidth: 80, halign: 'right' },
-                    5: { cellWidth: 90, halign: 'right' },
-                    6: { cellWidth: 70, halign: 'right' }
+                headStyles: {
+                    fillColor: [52, 73, 94], // Azul escuro
+                    textColor: 255,
+                    fontStyle: 'bold',
+                    halign: 'center'
                 },
-                didParseCell: function(data) {
-                    // Colorir células de eficiência
-                    if (data.column.index === 6) {
-                        const eficiencia = parseFloat(data.cell.text[0]);
-                        if (eficiencia >= 80) {
-                            data.cell.styles.fillColor = [232, 245, 233];
-                            data.cell.styles.textColor = [39, 174, 96];
-                        } else if (eficiencia >= 60) {
-                            data.cell.styles.fillColor = [255, 253, 231];
-                            data.cell.styles.textColor = [241, 196, 15];
-                        } else {
-                            data.cell.styles.fillColor = [255, 243, 224];
-                            data.cell.styles.textColor = [230, 126, 34];
-                        }
-                    }
-                    
-                    // Colorir células de prejuízo
-                    if (data.column.index === 5) {
-                        const valorText = data.cell.text[0];
-                        if (valorText !== '-') {
-                            const valor = parseFloat(valorText.replace('R$', '').replace('.', '').replace(',', '.'));
-                            if (valor > 0) {
-                                data.cell.styles.fillColor = [255, 235, 238];
-                                data.cell.styles.textColor = [231, 76, 60];
-                            }
-                        }
-                    }
+                columnStyles: {
+                    0: { fontStyle: 'bold', cellWidth: 100 },
+                    1: { cellWidth: 'auto', halign: 'right' }
                 }
             });
             
-            yPos = doc.lastAutoTable.finalY + 30;
+            startY = doc.lastAutoTable.finalY + 10;
             
-            // Conclusão
+            // SE HOUVER SOBRAS TRANSFORMADAS
+            if (transformacoes.length > 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(243, 156, 18); // Laranja
+                doc.text('SOBRAS TRANSFORMADAS:', margin, startY);
+                startY += 8;
+                
+                // Calcular totais das transformações
+                const totalPesoInicial = transformacoes.reduce((sum, t) => sum + safeNumber(t.initialWeight), 0);
+                const totalPesoFinal = transformacoes.reduce((sum, t) => sum + safeNumber(t.finalWeight), 0);
+                const totalValorParcial = totalPesoInicial * produto.pricePerKg;
+                const totalValorTransformado = transformacoes.reduce((sum, t) => sum + (safeNumber(t.finalWeight) * safeNumber(t.destinationPricePerKg)), 0);
+                
+                // Tabela de Sobras
+                doc.autoTable({
+                    startY: startY,
+                    margin: { left: margin, right: margin },
+                    body: [
+                        ['Peso Inicial Sobras:', `${totalPesoInicial.toFixed(3)} kg`],
+                        ['Valor Parcial Sobras:', `R$ ${totalValorParcial.toFixed(2)}`],
+                        ['Peso Final Transformado:', `${totalPesoFinal.toFixed(3)} kg`],
+                        ['Valor Total Transformado:', `R$ ${totalValorTransformado.toFixed(2)}`],
+                        ['Tipo de Transformação:', transformacoes[0].destinationName],
+                        ['Prejuízo com Sobras:', `R$ ${prejuizoSobras.toFixed(2)}`]
+                    ],
+                    theme: 'plain',
+                    styles: {
+                        fontSize: 10,
+                        cellPadding: 4,
+                        overflow: 'linebreak'
+                    },
+                    columnStyles: {
+                        0: { fontStyle: 'bold', cellWidth: 120, fillColor: [255, 243, 205] },
+                        1: { cellWidth: 'auto', halign: 'right' }
+                    }
+                });
+                
+                startY = doc.lastAutoTable.finalY + 10;
+                
+                // Tabela detalhada das transformações
+                if (transformacoes.length > 0) {
+                    doc.autoTable({
+                        startY: startY,
+                        margin: { left: margin, right: margin },
+                        head: [['Data', 'Peso Inicial (kg)', 'Peso Final (kg)', 'Tipo', 'Prejuízo (R$)']],
+                        body: transformacoes.map(t => [
+                            formatDate(t.date),
+                            t.initialWeight.toFixed(3),
+                            t.finalWeight.toFixed(3),
+                            t.destinationName,
+                            t.lossValue.toFixed(2)
+                        ]),
+                        theme: 'grid',
+                        styles: {
+                            fontSize: 9,
+                            cellPadding: 4
+                        },
+                        headStyles: {
+                            fillColor: [243, 156, 18], // Laranja
+                            textColor: 255,
+                            fontStyle: 'bold'
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 40 },
+                            1: { cellWidth: 35, halign: 'right' },
+                            2: { cellWidth: 35, halign: 'right' },
+                            3: { cellWidth: 50 },
+                            4: { cellWidth: 35, halign: 'right', textColor: [231, 76, 60] } // Vermelho para prejuízo
+                        }
+                    });
+                    
+                    startY = doc.lastAutoTable.finalY + 15;
+                }
+            }
+            
+            // SE HOUVER PERDAS
+            if (perdas.length > 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(231, 76, 60); // Vermelho
+                doc.text('PERDAS/DESCARTES:', margin, startY);
+                startY += 8;
+                
+                // Tabela de Perdas
+                doc.autoTable({
+                    startY: startY,
+                    margin: { left: margin, right: margin },
+                    body: [
+                        ['Total Perdido:', `${totalPerdas.toFixed(3)} kg`],
+                        ['Prejuízo Perdas:', `R$ ${prejuizoPerdas.toFixed(2)}`],
+                        ['Motivos:', perdas.map(p => p.motivo || 'Não informado').filter((v, i, a) => a.indexOf(v) === i).join(', ')]
+                    ],
+                    theme: 'plain',
+                    styles: {
+                        fontSize: 10,
+                        cellPadding: 4
+                    },
+                    columnStyles: {
+                        0: { fontStyle: 'bold', cellWidth: 100, fillColor: [255, 235, 238] },
+                        1: { cellWidth: 'auto', halign: 'right', textColor: [231, 76, 60] },
+                        2: { cellWidth: 'auto', halign: 'left' }
+                    }
+                });
+                
+                startY = doc.lastAutoTable.finalY + 10;
+                
+                // Tabela detalhada das perdas
+                if (perdas.length > 0) {
+                    doc.autoTable({
+                        startY: startY,
+                        margin: { left: margin, right: margin },
+                        head: [['Data', 'Quantidade (kg)', 'Motivo', 'Prejuízo (R$)']],
+                        body: perdas.map(p => [
+                            formatDate(p.date),
+                            p.quantity.toFixed(3),
+                            p.motivo || 'Não informado',
+                            (safeNumber(p.quantity) * safeNumber(p.pricePerKg || produto.pricePerKg)).toFixed(2)
+                        ]),
+                        theme: 'grid',
+                        styles: {
+                            fontSize: 9,
+                            cellPadding: 4
+                        },
+                        headStyles: {
+                            fillColor: [231, 76, 60], // Vermelho
+                            textColor: 255,
+                            fontStyle: 'bold'
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 40 },
+                            1: { cellWidth: 35, halign: 'right' },
+                            2: { cellWidth: 60 },
+                            3: { cellWidth: 35, halign: 'right', textColor: [231, 76, 60] }
+                        }
+                    });
+                    
+                    startY = doc.lastAutoTable.finalY + 15;
+                }
+            }
+            
+            // DETALHAMENTO DA PRODUÇÃO NORMAL
+            if (produto.records.length > 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(39, 174, 96); // Verde
+                doc.text('DETALHAMENTO DA PRODUÇÃO NORMAL:', margin, startY);
+                startY += 8;
+                
+                // Limitar a 10 registros para não sobrecarregar
+                const registrosLimitados = produto.records.slice(0, 10);
+                
+                doc.autoTable({
+                    startY: startY,
+                    margin: { left: margin, right: margin },
+                    head: [['Data', 'Peso Líquido (kg)', 'Valor/kg (R$)', 'Valor Total (R$)']],
+                    body: registrosLimitados.map(r => [
+                        `${formatDate(r.date)} ${r.time.split(':').slice(0, 2).join(':')}`,
+                        r.netWeight.toFixed(3),
+                        r.pricePerKg.toFixed(2),
+                        r.totalValue.toFixed(2)
+                    ]),
+                    theme: 'grid',
+                    styles: {
+                        fontSize: 9,
+                        cellPadding: 4
+                    },
+                    headStyles: {
+                        fillColor: [39, 174, 96], // Verde
+                        textColor: 255,
+                        fontStyle: 'bold'
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 50 },
+                        1: { cellWidth: 35, halign: 'right' },
+                        2: { cellWidth: 35, halign: 'right' },
+                        3: { cellWidth: 35, halign: 'right' }
+                    }
+                });
+                
+                startY = doc.lastAutoTable.finalY + 15;
+                
+                // Se houver mais registros, mostrar aviso
+                if (produto.records.length > 10) {
+                    doc.setFontSize(9);
+                    doc.setTextColor(100, 100, 100);
+                    doc.text(`* Mostrando 10 de ${produto.records.length} registros.`, margin, startY);
+                    startY += 8;
+                }
+            }
+            
+            // Adicionar linha divisória entre produtos
+            if (index < Object.values(productionByProduct).length - 1) {
+                doc.setDrawColor(220, 220, 220);
+                doc.setLineWidth(0.5);
+                doc.line(margin, startY, pageWidth - margin, startY);
+                startY += 15;
+            }
+        });
+        
+        // PÁGINA FINAL: RESUMO COMPARATIVO (se houver mais de um produto)
+        if (Object.keys(productionByProduct).length > 1) {
+            doc.addPage('landscape');
+            
+            doc.setFontSize(16);
+            doc.setTextColor(60, 60, 60);
+            doc.text('ANÁLISE COMPARATIVA ENTRE PRODUTOS', pageWidth / 2, 25, { align: 'center' });
+            
+            // Preparar dados para tabela comparativa
+            const tabelaComparativa = [];
+            Object.values(productionByProduct).forEach(produto => {
+                const transformacoes = reassignmentRecords.filter(r => r.originProductCode === produto.code);
+                const perdas = wasteRecords.filter(w => w.productCode === produto.code && w.type === 'perda');
+                
+                const totalSobras = transformacoes.reduce((sum, t) => sum + safeNumber(t.initialWeight), 0);
+                const totalPerdas = perdas.reduce((sum, p) => sum + safeNumber(p.quantity), 0);
+                const prejuizoSobras = transformacoes.reduce((sum, t) => sum + safeNumber(t.lossValue), 0);
+                const prejuizoPerdas = perdas.reduce((sum, p) => sum + (safeNumber(p.quantity) * safeNumber(p.pricePerKg || produto.pricePerKg)), 0);
+                
+                const producaoUtil = produto.production - totalSobras - totalPerdas;
+                const eficiencia = produto.production > 0 ? ((producaoUtil / produto.production) * 100).toFixed(1) : '100.0';
+                
+                tabelaComparativa.push([
+                    produto.name,
+                    `${produto.production.toFixed(3)} kg`,
+                    `R$ ${produto.value.toFixed(2)}`,
+                    `${totalSobras.toFixed(3)} kg`,
+                    `${totalPerdas.toFixed(3)} kg`,
+                    `R$ ${(prejuizoSobras + prejuizoPerdas).toFixed(2)}`,
+                    `${eficiencia}%`
+                ]);
+            });
+            
+            // Tabela comparativa
+            doc.autoTable({
+                startY: 35,
+                margin: { left: margin, right: margin },
+                head: [['Produto', 'Produção (kg)', 'Valor (R$)', 'Sobras (kg)', 'Perdas (kg)', 'Prejuízo (R$)', 'Eficiência']],
+                body: tabelaComparativa,
+                theme: 'grid',
+                styles: {
+                    fontSize: 9,
+                    cellPadding: 4
+                },
+                headStyles: {
+                    fillColor: [52, 73, 94],
+                    textColor: 255,
+                    fontStyle: 'bold',
+                    halign: 'center'
+                },
+                columnStyles: {
+                    0: { cellWidth: 50 },
+                    1: { cellWidth: 30, halign: 'right' },
+                    2: { cellWidth: 30, halign: 'right' },
+                    3: { cellWidth: 30, halign: 'right' },
+                    4: { cellWidth: 30, halign: 'right' },
+                    5: { cellWidth: 35, halign: 'right', textColor: [231, 76, 60] },
+                    6: { cellWidth: 25, halign: 'right' }
+                }
+            });
+            
+            // CONCLUSÃO FINAL
+            const finalY = doc.lastAutoTable.finalY + 15;
             doc.setFontSize(12);
-            doc.setTextColor(30, 30, 30);
-            doc.setFont('helvetica', 'bold');
-            doc.text('CONCLUSÃO:', 40, yPos);
-            yPos += 20;
+            doc.setTextColor(60, 60, 60);
+            doc.text('CONCLUSÃO DO PERÍODO:', margin, finalY);
             
-            doc.setFont('helvetica', 'normal');
             doc.setFontSize(10);
+            const texto = [
+                `O período analisado compreende ${Object.keys(productionByProduct).length} produtos diferentes.`,
+                `A produção total foi de ${Object.values(productionByProduct).reduce((sum, p) => sum + p.production, 0).toFixed(3)} kg.`,
+                `O valor total produzido foi de R$ ${Object.values(productionByProduct).reduce((sum, p) => sum + p.value, 0).toFixed(2)}.`
+            ];
             
-            const conclusaoText = `O período analisado compreende ${Object.keys(produtosAgrupados).length} produtos diferentes, ` +
-                                `com produção total de ${totalGeralProducao.toFixed(3)} kg e valor total de ` +
-                                `${totalGeralProducaoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
-                                `Foram transformadas ${totalGeralSobras.toFixed(3)} kg em sobras e registradas ` +
-                                `${totalGeralPerdas.toFixed(3)} kg em perdas/descartes. O prejuízo total foi de ` +
-                                `${totalGeralPrejuizo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
-                                `A eficiência média de produção foi de ${eficienciaMedia.toFixed(1)}%.`;
-            
-            doc.text(conclusaoText, 40, yPos, { maxWidth: pageWidth - 80 });
+            let yPosTexto = finalY + 8;
+            texto.forEach(linha => {
+                doc.text(linha, margin + 10, yPosTexto);
+                yPosTexto += 6;
+            });
         }
         
-        // Rodapé em todas as páginas - ajustado para paisagem
-        const pageCount = doc.internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
+        // Adicionar rodapé em todas as páginas
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
             doc.setPage(i);
             
-            // Rodapé com informações
-            doc.setFontSize(8);
-            doc.setTextColor(150, 150, 150);
-            doc.setFont('helvetica', 'normal');
-            
-            // Linha do rodapé - largura total
+            // Linha do rodapé
             doc.setDrawColor(200, 200, 200);
-            doc.setLineWidth(0.5);
-            doc.line(40, pageHeight - 40, pageWidth - 40, pageHeight - 40);
+            doc.line(margin, 270, pageWidth - margin, 270);
             
-            // Textos do rodapé
-            doc.text('Sistema de Controle de Produção • Relatório por Produto', 40, pageHeight - 25);
-            doc.text(`Página ${i} de ${pageCount}`, pageWidth - 100, pageHeight - 25);
-            
-            // Adicionar logo ou identificação da empresa
-            if (i === 1) {
-                doc.setFontSize(10);
-                doc.setTextColor(41, 98, 255);
-                doc.setFont('helvetica', 'bold');
-                const logoText = 'CONTROLE DE PRODUÇÃO E QUALIDADE';
-                const logoWidth = doc.getStringUnitWidth(logoText) * doc.internal.getFontSize() / doc.internal.scaleFactor;
-                const logoX = (pageWidth - logoWidth) / 2;
-                doc.text(logoText, logoX, 30);
-            }
+            // Texto do rodapé
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.text('ProControl - Sistema de Controle de Produção', margin, 277);
+            doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, 277, { align: 'right' });
+            doc.text(`Gerado em: ${dataGeracao} ${horaGeracao}`, pageWidth / 2, 277, { align: 'center' });
         }
         
-        // Salvar PDF
-        const nomeArquivo = `relatorio_producao_${moment().format('YYYYMMDD_HHmmss')}.pdf`;
-        doc.save(nomeArquivo);
+        // Salvar o PDF
+        const fileName = `relatorio_producao_${startDate}_${endDate}.pdf`;
+        doc.save(fileName);
         
-        this.mostrarNotificacao(`PDF gerado com sucesso: ${nomeArquivo}`, 'success');
+        showNotification('Relatório PDF gerado com sucesso!', 'success');
+        
     } catch (error) {
         console.error('Erro ao gerar PDF:', error);
-        this.mostrarNotificacao('Erro ao gerar PDF. Verifique se todos os dados estão corretos.', 'error');
+        showNotification('Erro ao gerar relatório: ' + error.message, 'error');
     }
 }
+function exportToExcel() {
+    showNotification('Exportação para Excel em desenvolvimento', 'info');
+}
 
-    mostrarModal(mensagem, callbackConfirmar) {
-        document.getElementById('modal-message').textContent = mensagem;
-        document.getElementById('confirmation-modal').style.display = 'flex';
+// Funções de Configurações
+function loadProductsTable() {
+    const tbody = document.getElementById('products-table');
+    const products = productBase.getAllProducts();
+    
+    tbody.innerHTML = '';
+    
+    products.forEach(product => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${product.name}</td>
+            <td>${product.code}</td>
+            <td>${product.tara ? product.tara.toFixed(3) : '0.000'}</td>
+            <td>R$ ${product.pricePerKg ? product.pricePerKg.toFixed(2) : '0.00'}</td>
+            <td>
+                <button class="btn btn-small btn-icon" onclick="editProduct('${product.id}')">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-small btn-icon btn-danger" onclick="deleteProduct('${product.id}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function loadEmployeesTable() {
+    const tbody = document.getElementById('employees-table');
+    const employees = productBase.getAllEmployees();
+    
+    tbody.innerHTML = '';
+    
+    employees.forEach(employee => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${employee.name}</td>
+            <td>${employee.position}</td>
+            <td>${employee.code}</td>
+            <td><span class="badge ${employee.status === 'ativo' ? 'badge-success' : 'badge-danger'}">${employee.status}</span></td>
+            <td>
+                <button class="btn btn-small btn-icon" onclick="editEmployee('${employee.id}')">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-small btn-icon btn-danger" onclick="deleteEmployee('${employee.id}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function filterProductsTable() {
+    const searchTerm = document.getElementById('config-product-search').value.toLowerCase();
+    const rows = document.querySelectorAll('#products-table tr');
+    
+    rows.forEach(row => {
+        const productName = row.cells[0]?.textContent.toLowerCase() || '';
+        const productCode = row.cells[1]?.textContent.toLowerCase() || '';
         
-        const confirmar = document.getElementById('modal-confirm');
-        const novoConfirmar = confirmar.cloneNode(true);
-        confirmar.parentNode.replaceChild(novoConfirmar, confirmar);
-        
-        novoConfirmar.addEventListener('click', () => {
-            callbackConfirmar();
-            this.fecharModal();
-        });
+        if (productName.includes(searchTerm) || productCode.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function showProductModal(productId = null) {
+    const modal = document.getElementById('product-modal');
+    const form = document.getElementById('product-form');
+    
+    if (productId) {
+        // Modo edição
+        const product = productBase.getProductById(productId);
+        if (product) {
+            document.getElementById('modal-product-name').value = product.name;
+            document.getElementById('modal-product-code').value = product.code;
+            document.getElementById('modal-product-tara').value = product.tara || 0;
+            document.getElementById('modal-product-price').value = product.pricePerKg || 0;
+            document.getElementById('modal-product-id').value = product.id;
+            
+            document.querySelector('#product-modal h3').innerHTML = '<i class="fas fa-edit"></i> Editar Produto';
+        }
+    } else {
+        // Modo cadastro
+        form.reset();
+        document.getElementById('modal-product-id').value = '';
+        document.querySelector('#product-modal h3').innerHTML = '<i class="fas fa-box"></i> Cadastrar Novo Produto';
     }
     
-    fecharModal() {
-        document.getElementById('confirmation-modal').style.display = 'none';
+    modal.classList.add('active');
+}
+
+function closeProductModal() {
+    document.getElementById('product-modal').classList.remove('active');
+    document.getElementById('product-form').reset();
+}
+
+// Função saveProduct (MODIFICADA)
+function saveProduct() {
+    const form = document.getElementById('product-form');
+    
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
     }
     
-    mostrarNotificacao(mensagem, tipo = 'success') {
-        const notification = document.getElementById('notification');
-        const message = document.getElementById('notification-message');
-        const icon = document.getElementById('notification-icon');
-        
-        message.textContent = mensagem;
-        notification.className = `notification ${tipo}`;
-        
-        // Definir ícone baseado no tipo
-        if (tipo === 'success') {
-            icon.className = 'fas fa-check-circle';
-        } else if (tipo === 'error') {
-            icon.className = 'fas fa-exclamation-circle';
-        } else if (tipo === 'warning') {
-            icon.className = 'fas fa-exclamation-triangle';
+    const productData = {
+        name: document.getElementById('modal-product-name').value,
+        code: document.getElementById('modal-product-code').value,
+        tara: parseFloat(document.getElementById('modal-product-tara').value),
+        pricePerKg: parseFloat(document.getElementById('modal-product-price').value)
+    };
+    
+    const productId = document.getElementById('modal-product-id').value;
+    
+    try {
+        if (productId) {
+            // Atualizar produto existente
+            productBase.updateProduct(productId, productData);
+            showNotification('Produto atualizado com sucesso!', 'success');
+        } else {
+            // Adicionar novo produto
+            productBase.addProduct(productData);
+            showNotification('Produto cadastrado com sucesso!', 'success');
         }
         
-        notification.style.display = 'flex';
+        // ADICIONADO: Salvar no localStorage
+        saveToLocalStorage();
         
-        setTimeout(() => {
-            notification.style.display = 'none';
-        }, 5000);
+        closeProductModal();
+        loadProductsTable();
+        
+    } catch (error) {
+        showNotification('Erro ao salvar produto: ' + error.message, 'error');
+    }
+}
+function editProduct(productId) {
+    showProductModal(productId);
+}
+
+// Função deleteProduct (MODIFICADA)
+function deleteProduct(productId) {
+    showConfirmModal(
+        'Excluir Produto',
+        'Tem certeza que deseja excluir este produto? Esta ação não pode ser desfeita.',
+        () => {
+            if (productBase.deleteProduct(productId)) {
+                // ADICIONADO: Salvar no localStorage
+                saveToLocalStorage();
+                
+                showNotification('Produto excluído com sucesso!', 'success');
+                loadProductsTable();
+            } else {
+                showNotification('Erro ao excluir produto', 'error');
+            }
+        }
+    );
+}
+
+function showEmployeeModal(employeeId = null) {
+    const modal = document.getElementById('employee-modal');
+    const form = document.getElementById('employee-form');
+    
+    if (employeeId) {
+        // Modo edição
+        const employee = productBase.getEmployeeById(employeeId);
+        if (employee) {
+            document.getElementById('modal-employee-name').value = employee.name;
+            document.getElementById('modal-employee-position').value = employee.position;
+            document.getElementById('modal-employee-code').value = employee.code;
+            document.getElementById('modal-employee-status').value = employee.status;
+            document.getElementById('modal-employee-id').value = employee.id;
+            
+            document.querySelector('#employee-modal h3').innerHTML = '<i class="fas fa-user-edit"></i> Editar Colaborador';
+        }
+    } else {
+        // Modo cadastro
+        form.reset();
+        document.getElementById('modal-employee-status').value = 'ativo';
+        document.getElementById('modal-employee-id').value = '';
+        document.querySelector('#employee-modal h3').innerHTML = '<i class="fas fa-user-plus"></i> Cadastrar Colaborador';
+    }
+    
+    modal.classList.add('active');
+}
+
+function closeEmployeeModal() {
+    document.getElementById('employee-modal').classList.remove('active');
+    document.getElementById('employee-form').reset();
+}
+
+// Função saveEmployee (MODIFICADA)
+function saveEmployee() {
+    const form = document.getElementById('employee-form');
+    
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const employeeData = {
+        name: document.getElementById('modal-employee-name').value,
+        position: document.getElementById('modal-employee-position').value,
+        code: document.getElementById('modal-employee-code').value,
+        status: document.getElementById('modal-employee-status').value
+    };
+    
+    const employeeId = document.getElementById('modal-employee-id').value;
+    
+    try {
+        if (employeeId) {
+            // Atualizar colaborador existente
+            productBase.updateEmployee(employeeId, employeeData);
+            showNotification('Colaborador atualizado com sucesso!', 'success');
+        } else {
+            // Adicionar novo colaborador
+            productBase.addEmployee(employeeData);
+            showNotification('Colaborador cadastrado com sucesso!', 'success');
+        }
+        
+        // ADICIONADO: Salvar no localStorage
+        saveToLocalStorage();
+        
+        closeEmployeeModal();
+        loadEmployeesTable();
+        loadEmployees(); // Atualizar select de colaboradores
+        
+    } catch (error) {
+        showNotification('Erro ao salvar colaborador: ' + error.message, 'error');
     }
 }
 
-// Inicializar o sistema quando a página carregar
-let sistema;
-document.addEventListener('DOMContentLoaded', () => {
-    sistema = new SistemaProducao();
-});
+function editEmployee(employeeId) {
+    showEmployeeModal(employeeId);
+}
+
+// Função deleteEmployee (MODIFICADA)
+function deleteEmployee(employeeId) {
+    showConfirmModal(
+        'Excluir Colaborador',
+        'Tem certeza que deseja excluir este colaborador? Esta ação não pode ser desfeita.',
+        () => {
+            if (productBase.deleteEmployee(employeeId)) {
+                // ADICIONADO: Salvar no localStorage
+                saveToLocalStorage();
+                
+                showNotification('Colaborador excluído com sucesso!', 'success');
+                loadEmployeesTable();
+                loadEmployees(); // Atualizar select de colaboradores
+            } else {
+                showNotification('Erro ao excluir colaborador', 'error');
+            }
+        }
+    );
+}
+
+function backupData() {
+    const data = {
+        productionRecords,
+        wasteRecords,
+        reassignmentRecords,
+        products: productBase.getAllProducts(),
+        employees: productBase.getAllEmployees(),
+        timestamp: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(data, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `backup-procontrol-${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    showNotification('Backup criado com sucesso!', 'success');
+}
+
+function exportData() {
+    showNotification('Exportação de dados em desenvolvimento', 'info');
+}
+
+function importData() {
+    showNotification('Importação de dados em desenvolvimento', 'info');
+}
+
+function clearData() {
+    showConfirmModal(
+        'Apagar Todos os Dados',
+        'ATENÇÃO: Esta ação irá remover TODOS os registros de produção, sobras, perdas e remanejamentos. Esta ação NÃO pode ser desfeita. Tem certeza?',
+        () => {
+            productionRecords = [];
+            wasteRecords = [];
+            reassignmentRecords = [];
+            saveToLocalStorage();
+            
+            showNotification('Todos os dados foram apagados com sucesso!', 'success');
+            
+            // Atualizar todas as páginas
+            loadDashboardData();
+            loadWasteRecords();
+            loadRecords();
+            loadReports();
+        }
+    );
+}
+
+function showConfirmModal(title, message, confirmCallback) {
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-message').textContent = message;
+    
+    // Atualizar título (se houver elemento para isso)
+    const titleElement = modal.querySelector('h3');
+    if (titleElement) {
+        titleElement.innerHTML = `<i class="fas fa-question-circle"></i> ${title}`;
+    }
+    
+    // Configurar botão de confirmação
+    const confirmBtn = document.getElementById('confirm-ok');
+    confirmBtn.onclick = () => {
+        modal.classList.remove('active');
+        if (confirmCallback) confirmCallback();
+    };
+    
+    // Configurar botão de cancelar
+    const cancelBtn = document.getElementById('confirm-cancel');
+    cancelBtn.onclick = () => {
+        modal.classList.remove('active');
+    };
+    
+    modal.classList.add('active');
+}
+
+function closeAllModals() {
+    document.querySelectorAll('.modal.active').forEach(modal => {
+        modal.classList.remove('active');
+    });
+}
+
+// Funções auxiliares para ações
+function editWasteRecord(id) {
+    const record = wasteRecords.find(r => r.id === id);
+    if (!record) return;
+    
+    // Preencher formulário com dados do registro
+    document.getElementById('waste-product-search').value = record.productName;
+    
+    // Simular seleção do produto
+    const product = productBase.getProductByCode(record.productCode);
+    if (product) {
+        // Atualizar interface para mostrar produto selecionado
+        document.getElementById('selected-waste-product').style.display = 'block';
+        document.getElementById('waste-product-name').textContent = product.name;
+        
+        // Carregar períodos disponíveis
+        const producoesPorData = {};
+        productionRecords
+            .filter(p => p.productCode === product.code)
+            .forEach(p => {
+                if (!producoesPorData[p.date]) producoesPorData[p.date] = 0;
+                producoesPorData[p.date] += p.netWeight;
+            });
+        
+        // Preencher select de período
+        const periodoSelect = document.getElementById('waste-periodo-select');
+        periodoSelect.innerHTML = '<option value="">Selecione o período</option>';
+        Object.keys(producoesPorData).forEach(data => {
+            const option = document.createElement('option');
+            option.value = data;
+            option.textContent = `${data} - ${producoesPorData[data].toFixed(3)} kg`;
+            if (data === record.periodoId) option.selected = true;
+            periodoSelect.appendChild(option);
+        });
+        
+        // Mostrar select de período
+        document.getElementById('periodo-select-container').style.display = 'block';
+    }
+    
+    // Preencher outros campos
+    document.getElementById('waste-date').value = record.date;
+    document.getElementById('waste-type').value = record.type;
+    document.getElementById('waste-motivo').value = record.motivo || '';
+    document.getElementById('waste-quantity').value = record.quantity;
+    document.getElementById('waste-observations').value = record.observations || '';
+    
+    // Mostrar botão de atualizar em vez de registrar
+    const registerBtn = document.getElementById('register-waste');
+    registerBtn.innerHTML = '<i class="fas fa-save"></i> Atualizar Registro';
+    registerBtn.onclick = () => updateWasteRecord(id);
+    
+    // Adicionar botão de cancelar edição
+    if (!document.getElementById('cancel-edit-waste')) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.id = 'cancel-edit-waste';
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.innerHTML = '<i class="fas fa-times"></i> Cancelar Edição';
+        cancelBtn.onclick = () => {
+            clearWasteForm();
+            registerBtn.innerHTML = '<i class="fas fa-save"></i> Registrar Sobras/Perdas';
+            registerBtn.onclick = registerWaste;
+            cancelBtn.remove();
+        };
+        
+        const formActions = document.querySelector('.form-actions');
+        formActions.insertBefore(cancelBtn, registerBtn);
+    }
+    
+    showNotification('Editando registro...', 'info');
+}
+
+function updateWasteRecord(id) {
+    const index = wasteRecords.findIndex(r => r.id === id);
+    if (index === -1) return;
+    
+    // Atualizar dados (similar ao registerWaste, mas mantendo o ID)
+    const record = wasteRecords[index];
+    
+    // Atualizar campos
+    record.type = document.getElementById('waste-type').value;
+    record.motivo = document.getElementById('waste-motivo').value;
+    record.quantity = parseFloat(document.getElementById('waste-quantity').value);
+    record.periodoId = document.getElementById('waste-periodo-select').value;
+    record.observations = document.getElementById('waste-observations').value;
+    
+    // Recalcular valores
+    const product = productBase.getProductByCode(record.productCode);
+    if (product) {
+        record.pricePerKg = product.pricePerKg || 0;
+        record.valorTotal = record.quantity * record.pricePerKg;
+    }
+    
+    // Salvar
+    saveToLocalStorage();
+    loadWasteRecords();
+    clearWasteForm();
+    
+    // Restaurar botão original
+    const registerBtn = document.getElementById('register-waste');
+    registerBtn.innerHTML = '<i class="fas fa-save"></i> Registrar Sobras/Perdas';
+    registerBtn.onclick = registerWaste;
+    
+    // Remover botão de cancelar
+    const cancelBtn = document.getElementById('cancel-edit-waste');
+    if (cancelBtn) cancelBtn.remove();
+    
+    showNotification('Registro atualizado com sucesso!', 'success');
+}
+
+function deleteWasteRecord(id) {
+    showConfirmModal(
+        'Excluir Registro',
+        'Tem certeza que deseja excluir este registro de sobras/perdas?',
+        () => {
+            const index = wasteRecords.findIndex(r => r.id === id);
+            if (index !== -1) {
+                wasteRecords.splice(index, 1);
+                saveToLocalStorage();
+                loadWasteRecords();
+                showNotification('Registro excluído com sucesso!', 'success');
+            }
+        }
+    );
+}
+
+function viewRecordDetails(id, type) {
+    showNotification('Visualização de detalhes em desenvolvimento', 'info');
+}
+
+// Adicionar alguns estilos CSS dinâmicos
+const style = document.createElement('style');
+style.textContent = `
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .badge-production {
+        background-color: #dbeafe;
+        color: #1d4ed8;
+    }
+    
+    .badge-waste {
+        background-color: #f0fdf4;
+        color: #047857;
+    }
+    
+    .badge-danger {
+        background-color: #fee2e2;
+        color: #dc2626;
+    }
+    
+    .badge-reassignment {
+        background-color: #fef3c7;
+        color: #d97706;
+    }
+    
+    .badge-success {
+        background-color: #d1fae5;
+        color: #059669;
+    }
+    
+    .value-display {
+        padding: 0.75rem;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--dark-color);
+    }
+`;
+document.head.appendChild(style);

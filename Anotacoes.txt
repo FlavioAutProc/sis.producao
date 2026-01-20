@@ -1,0 +1,129 @@
+***CORREÇÕES DO SISTEMAS***
+
+Status [x] Resolvida [ ] Não Resolvida
+
+1 - Descrição: Erro de Persistencia
+    Colaborador nao esta sendo persistido, ao adicionar e atualizar
+    a página, os dados saem.
+--------------------------------------------------------------------
+Status [x] Resolvida [ ] Não Resolvida
+
+2 - Descrição: Busca por código em "PESAGENS" nao esta sendo aplicada
+    digito o código mais nao acontece nada.
+--------------------------------------------------------------------
+
+Status [ ] Resolvida [ ] Não Resolvida
+3 - Descrição: Ações de Edição em Registros de Sobras/Perdas nao implementada
+    Local: Sobras/Perdas 
+    Descrição: Dados da tabela nao estao sendo calculados: 
+    Produção total daquele periodo de onde foi gerado as sobras.
+    Cálculo de diferença de valor Produção total R$ x diferença de sobra
+    valores de prejuizos com perdas
+    
+    Data/Hora	Tipo	    |  Produto    |	Total (produção)  (kg) | Valor (R$)    |  Total Perda/Sobra (kg) | Valor Total Sobra/Perda | Diferença (kg)	                            | Prejuízo	|Ações (Editar/Exluir)
+                Perda/Sobra |  P. Frances |         120 kg         |  120*valor kg |      X kg               |            R$ xx        | (kg sobra sobre kg do produto transormado) | (valor R$ da sobra sobre o vaor R$ produto final) |
+--------------------------------------------------------------------
+
+Status [ ] Resolvida [ ] Não Resolvida
+4 - Ao registrar sobras e depois ir em REMANEJAMENTO, eles nao localiza as sobras que foram registradas
+    Mensagem ao digitar o código: Nenhum produto com sobras disponíveis encontrado
+
+
+Status [x] Resolvida [ ] Não Resolvida
+5 - sobras/Perdas
+    Quando o usuário pesquisar o produto exibir os dados de cada produção separadas por periodo
+    por exemplo em datas diferentes a produção nao pode ser cumulativa. pois o sistema esta acumulando a produção de cada dia.
+    adicionar um select com a lista de periodos de produção com a quantidade produzida
+
+    aparti daí o usuário define quanto foi que sobrou ou perdeu
+    adicionar [ motivo da sobra/perda] sobra fechamento ou defeito,avaria etc
+    apos o registro de sobras/perdas daquele perido selecionado, entende-se que aquela produção e registro de sobra foi finalizado 
+    se for sobra fechamento, entende-se que aquela produção e o expediente ja foi finalizado naquele periodo e
+    e os valores de sobra/perda ficam apenas para o remanejamento não podendo mais ser registrada nova sobra do periodo definido e escolhido
+       
+    deve ser calculado os valores de forma automática de acordo com o peso de sobra/descarte com o valor do produto cadastrado 
+    na base de dados
+    Data/Hora
+    Tipo: PERDA/SOBRA
+    Produto: PÃO FRANCÊS...
+    Total (kg) TOTAL DA SOBRA/PERDA
+    Valor (R$) SOBRA/PERDA
+    Produção Total: (kg) TOTAL DO PERIÓD PRODUZIDO
+    Diferença (kg) SOBRA KG sobre a diferenã do PRODUTO TRANFORMADO(FARINHA ROSCA/TORRADA)
+    Prejuízo: DIFERENÇA VALOR DA SOBRA DO PRODUTO sobre o valor do produto final
+    Ações: EDITAR/REMOVER
+
+    
+--------------------------------------------------------------------
+**NOVO***
+Status [] Resolvida [ ] Não Resolvida
+Tipo: ATUALIZAÇÃO
+Local: REMANEJAMENTO
+Descrição:
+Deve mostrar os dados das sobras/Perdas que foram registradas em SOBRAS/PERDAS
+O sistema ja mostra quando informa o código mas alem dessa forma, adicionar outra mais interativa e dinamica
+mas nao remova a que ja tem. validação robusta para capturar dados exatos. para nao acabar extraindo dados da produção.
+--------------------------------------------------------------------
+Status [x] Resolvida [ ] Não Resolvida
+Tipo: ATUALIZAÇÃO
+Local: REMANEJAMENTO
+Descrição:
+A selecionar o tipo de Remanejamento se for torrada ou farinha de rosca, verificar se o produto esta na base de dados
+Verificar se contem vario tipos do produto. edicinar um select para selecionar caso haja mais de um tipo do produto remanejado
+calculos automaticos se houver o produto e o valor cadastrado. se o produto nao tiver cadastrado adicionar validação para perguntar se o user 
+deseja cadastrar produto.
+
+no caso apenas:
+Peso Inicial (kg) 
+Peso Final (kg)
+vao ser digitados pelo usuario, os demais calculos serão automaticos com base cadastrado no sistema
+--------------------------------------------------------------------
+
+Analizar:
+Registros de Produção
+Implementar funções de exportações PDF/XLSX/CSV
+Gráficos parecem nao está implementados
+
+Data/Hora	        Tipo	Produto	     Total (kg)	 Valor (R$)	Produção Total (kg)	Diferença (kg)	Prejuízo	
+18/01/2026 15:50	SOBRA	PÃO FRANCÊS	 20.000 kg	 R$ 279.80	99.000 kg	          79.000 kg	    R$ 1105.21	
+
+============================================================================
+EXPORTAÇÃO RELATÓRIO PDF
+**ESTRUTURA**
+-------------------------------------------------------------------------------------------------------
+Dados Individuais de cada Produto
+Produção Total: xx kg       Sobras Totais kg: xx kg         Prejuizo Total R$:      Eficiências: 00%
+Valor Total: R$ 00.00,00    Perdas Totais R$: 00.00,00      Produos Analizados: 0
+-------------------------------------------------------------------------------------------------------
+PÃO FRANCÊS (Código: 4251)
+Produção Normal: 29.295 kg Valor Total: R$ 402,39
+Sobras Transformadas: 9.000 kg Prejuízo Sobras:R$ 49,41
+Perdas/Descartes: 0.000 kg Prejuízo Perdas:R$ 0,00
+Eficiência:
+
+====================================
+ESTRUTURA
+EXPORTAÇÃO PDF:
+
+deve SEGUIR o mesmo padrao para todos os produtos
+RESUMO DO PRODUTO: 
+Descrição
+Produção Normal: 100 kg
+Valor Total: R$ 1.399,00
+Eficiência: %
+
+Sobras Transformada: 20 kg:
+Valor Parcial: R$ 279,80 (20 kg * R$ 13,99 (valor do produto da base de dados cadastrado))
+Peso final Transformada: 18 kg
+Valor Total transformado: R$ 154,62 (peso transformado * valor kg produto da base de dados cadastrado(8,59) )
+tipo de Transormação: Torrada/Farinha de Rosca
+Prejuízo Sobras: R$ -125,18 (Valor transformado - Valor Parcial)
+Perdas/Descartes:
+Prejuízo Perdas
+
+O RELATÓRIO DEVE SEGUIR O MESMO PADRAO DEO ARQUIVO relatorio_producao.pdf anexado. so que mais profissional
+com a melhoria acima mencionada
+e modo paisagem. organizados legiveis, atento para nao vazar e quebrar conteudo
+adicione cores representativas para cada situação de alerta
+Não faça do relatório um painel dashboard com cards gigante e nem graficos
+foque apenas no upgrade da EXPORTAÇÃO

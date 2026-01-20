@@ -1,691 +1,1261 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Controle de Produção</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>ProControl - Sistema de Controle de Produção</title>
+    <!-- Adicione isto no <head> ou antes do fechamento do <body> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚙️</text></svg>">
 </head>
 <body>
-    <div class="container">
-        <!-- Cabeçalho Profissional -->
-        <header>
-            <h1><i class="fas fa-industry"></i> Sistema de Controle de Produção</h1>
-            <div class="header-info">
-                <div class="date-display">
-                    <i class="far fa-calendar-alt"></i>
+    <!-- Cabeçalho -->
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">
+                <i class="fas fa-industry"></i>
+                <h1>ProControl</h1>
+                <span class="logo-subtitle">Sistema de Produção</span>
+            </div>
+            
+            <div class="user-menu">
+                <div class="user-info">
+                    <i class="fas fa-user-circle"></i>
+                    <span>Operador</span>
+                </div>
+                <div class="date-time">
                     <span id="current-date"></span>
-                </div>
-                <div class="total-display">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Produção Hoje: <strong id="total-today">0 kg</strong></span>
-                </div>
-                <div class="loss-display">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span>Perdas Hoje: <strong id="total-loss">0 kg</strong></span>
+                    <span id="current-time"></span>
                 </div>
             </div>
-        </header>
+        </div>
+    </header>
 
-        <!-- Menu de Navegação Moderno -->
-        <nav class="tabs">
-            <button class="tab-button active" data-tab="dashboard">
-                <i class="fas fa-tachometer-alt"></i> Painel
-            </button>
-            <button class="tab-button" data-tab="weighing">
-                <i class="fas fa-weight"></i> Pesagem
-            </button>
-            <button class="tab-button" data-tab="remanejamento">
-                <i class="fas fa-recycle"></i> Remanejamento
-            </button>
-            <button class="tab-button" data-tab="records">
-                <i class="fas fa-history"></i> Registros
-            </button>
-            <button class="tab-button" data-tab="reports">
-                <i class="fas fa-chart-bar"></i> Relatórios
-            </button>
+    <!-- Conteúdo Principal -->
+    <div class="main-container">
+        <!-- Menu Lateral -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h3>MENU</h3>
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            
+            <ul class="sidebar-menu">
+                <li class="menu-item active" data-page="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Painel</span>
+                </li>
+                <li class="menu-item" data-page="weighing">
+                    <i class="fas fa-weight"></i>
+                    <span>Pesagem</span>
+                </li>
+                <li class="menu-item" data-page="waste">
+                    <i class="fas fa-recycle"></i>
+                    <span>Sobras/Perdas</span>
+                </li>
+                <li class="menu-item" data-page="reassignment">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Remanejamento</span>
+                </li>
+                <li class="menu-item" data-page="records">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Registros</span>
+                </li>
+                <li class="menu-item" data-page="reports">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Relatórios</span>
+                </li>
+                <li class="menu-item" data-page="configuration">
+                    <i class="fas fa-cogs"></i>
+                    <span>Configurações</span>
+                </li>
+            </ul>
+            
+            <div class="sidebar-footer">
+                <div class="system-status">
+                    <div class="status-indicator active"></div>
+                    <span>Sistema Online</span>
+                </div>
+                <div class="app-version">v1.0.0</div>
+            </div>
         </nav>
 
-        <!-- Conteúdo Principal -->
-        <main>
-            <!-- Painel Dashboard Moderno -->
-            <section id="dashboard" class="tab-content active">
-                <div class="dashboard-header">
+        <!-- Área de Conteúdo -->
+        <main class="content" id="content">
+            <!-- Página do Painel -->
+            <section class="page active" id="dashboard-page">
+                <div class="page-header">
                     <h2><i class="fas fa-tachometer-alt"></i> Painel de Controle - Produção Diária</h2>
-                    <button class="btn-refresh" id="refresh-dashboard">
-                        <i class="fas fa-sync-alt"></i> Atualizar
-                    </button>
-                </div>
-                
-                <div class="dashboard-grid">
-                    <div class="dashboard-card total-card">
-                        <div class="card-icon">
-                            <i class="fas fa-balance-scale"></i>
-                        </div>
-                        <div class="card-content">
-                            <h3>Produção Total Hoje</h3>
-                            <p class="card-value" id="daily-total">0 kg</p>
-                            <p class="card-subtext" id="daily-value">R$ 0,00</p>
-                        </div>
-                    </div>
-                    
-                    <div class="dashboard-card items-card">
-                        <div class="card-icon">
-                            <i class="fas fa-boxes"></i>
-                        </div>
-                        <div class="card-content">
-                            <h3>Itens Produzidos</h3>
-                            <p class="card-value" id="daily-items">0</p>
-                            <p class="card-subtext">Tipos de produtos</p>
-                        </div>
-                    </div>
-                    
-                    <div class="dashboard-card loss-card">
-                        <div class="card-icon">
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </div>
-                        <div class="card-content">
-                            <h3>Perdas/Descartes</h3>
-                            <p class="card-value" id="daily-loss">0 kg</p>
-                            <p class="card-subtext" id="loss-value">R$ 0,00</p>
-                        </div>
-                    </div>
-                    
-                    <div class="dashboard-card last-card">
-                        <div class="card-icon">
-                            <i class="fas fa-clock"></i>
-                        </div>
-                        <div class="card-content">
-                            <h3>Última Pesagem</h3>
-                            <p class="card-value" id="last-weighing">--:--</p>
-                            <p class="card-subtext" id="last-product">Nenhuma ainda</p>
-                        </div>
+                    <div class="page-actions">
+                        <button class="btn btn-icon" id="refreshDashboard">
+                            <i class="fas fa-sync-alt"></i>
+                            Atualizar
+                        </button>
+                        <button class="btn btn-primary btn-icon" id="newProduction">
+                            <i class="fas fa-plus"></i>
+                            Nova Pesagem
+                        </button>
                     </div>
                 </div>
-                
-                <div class="dashboard-charts">
-                    <div class="chart-container">
-                        <h3><i class="fas fa-chart-pie"></i> Distribuição Produção vs Perdas</h3>
-                        <canvas id="productionLossChart"></canvas>
+
+                <div class="dashboard-container">
+                    <!-- Cards de Resumo -->
+                    <div class="cards-grid">
+                        <div class="card stat-card">
+                            <div class="card-header">
+                                <h3>Produção Total (Hoje)</h3>
+                                <i class="fas fa-box-open"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="today-production">0.000 kg</div>
+                                <div class="stat-subvalue" id="today-value">R$ 0,00</div>
+                            </div>
+                            <div class="card-footer">
+                                <span>Comparativo com ontem: <span id="production-comparison">0%</span></span>
+                            </div>
+                        </div>
+
+                        <div class="card stat-card">
+                            <div class="card-header">
+                                <h3>Itens Produzidos</h3>
+                                <i class="fas fa-cubes"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="items-produced">0</div>
+                                <div class="stat-subvalue" id="products-types">0 tipos</div>
+                            </div>
+                            <div class="card-footer">
+                                <span>Produto mais produzido: <span id="top-product">-</span></span>
+                            </div>
+                        </div>
+
+                        <div class="card stat-card">
+                            <div class="card-header">
+                                <h3>Perdas/Descartes</h3>
+                                <i class="fas fa-trash-alt"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="today-waste">0.000 kg</div>
+                                <div class="stat-subvalue" id="waste-value">R$ 0,00</div>
+                            </div>
+                            <div class="card-footer">
+                                <span>Comparativo com ontem: <span id="waste-comparison">0%</span></span>
+                            </div>
+                        </div>
+
+                        <div class="card stat-card">
+                            <div class="card-header">
+                                <h3>Última Pesagem</h3>
+                                <i class="fas fa-history"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="last-weighing-time">--:--</div>
+                                <div class="stat-subvalue" id="last-weighing-product">Nenhuma ainda</div>
+                            </div>
+                            <div class="card-footer">
+                                <span>Status: <span id="weighing-status">Sem registros</span></span>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <div class="chart-container">
-                        <h3><i class="fas fa-star"></i> Top 5 Produtos Hoje</h3>
-                        <canvas id="topProductsTodayChart"></canvas>
-                    </div>
-                </div>
-                
-                <div class="recent-activity">
-                    <h3><i class="fas fa-history"></i> Atividade Recente</h3>
-                    <div class="activity-list" id="recent-activity">
-                        <div class="empty-state">
-                            <i class="fas fa-clipboard-list"></i>
-                            <p>Nenhuma atividade registrada hoje</p>
+
+                    <!-- Gráficos e Tabela -->
+                    <div class="dashboard-charts">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Distribuição de Produção</h3>
+                                <div class="chart-actions">
+                                    <button class="btn btn-small btn-icon" data-chart="day">
+                                        <i class="fas fa-calendar-day"></i>
+                                    </button>
+                                    <button class="btn btn-small btn-icon" data-chart="week">
+                                        <i class="fas fa-calendar-week"></i>
+                                    </button>
+                                    <button class="btn btn-small btn-icon active" data-chart="month">
+                                        <i class="fas fa-calendar-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-placeholder" id="production-chart">
+                                    <div class="no-data">
+                                        <i class="fas fa-chart-pie"></i>
+                                        <p>Sem dados para exibir</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card table-card">
+                            <div class="card-header">
+                                <h3>Atividade Recente</h3>
+                                <button class="btn btn-small btn-icon" id="refresh-activity">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="card-content">
+                                <div class="table-container">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Hora</th>
+                                                <th>Tipo</th>
+                                                <th>Produto</th>
+                                                <th>Peso (kg)</th>
+                                                <th>Valor (R$)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recent-activity">
+                                            <tr class="no-data-row">
+                                                <td colspan="5">Nenhuma atividade registrada hoje</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Tela de Pesagem Normal Atualizada -->
-            <section id="weighing" class="tab-content">
+            <!-- Página de Pesagem -->
+            <section class="page" id="weighing-page">
+                <div class="page-header">
+                    <h2><i class="fas fa-weight"></i> Nova Pesagem - Produção Normal</h2>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary" id="clear-weighing">
+                            <i class="fas fa-eraser"></i>
+                            Limpar
+                        </button>
+                        <button class="btn btn-primary" id="register-weighing">
+                            <i class="fas fa-save"></i>
+                            Registrar
+                        </button>
+                    </div>
+                </div>
+
                 <div class="weighing-container">
-                    <div class="weighing-header">
-                        <h2><i class="fas fa-weight"></i> Nova Pesagem - Produção Normal</h2>
-                        <div class="weighing-time">
-                            <i class="far fa-clock"></i>
-                            <span id="current-time">--:--:--</span>
-                        </div>
-                    </div>
-                    
-                    <div class="type-selector">
-                        <button class="type-btn active" data-type="normal">
-                            <i class="fas fa-check-circle"></i> Produção Normal
-                        </button>
-                        <button class="type-btn" data-type="rework">
-                            <i class="fas fa-recycle"></i> Remanejamento
-                        </button>
-                    </div>
-                    
                     <div class="weighing-form">
-                        <div class="form-group">
-                            <label for="product-search">
-                                <i class="fas fa-search"></i> Buscar Produto
-                            </label>
-                            <div class="search-container">
-                                <input type="text" id="product-search" placeholder="Digite o código ou nome do produto...">
+                        <div class="form-section">
+                            <h3>Informações do Produto</h3>
+                            <div class="form-group">
+                                <label for="product-search">
+                                    <i class="fas fa-search"></i>
+                                    Buscar Produto
+                                </label>
+                                <div class="search-container">
+                                    <input type="text" id="product-search" placeholder="Digite código ou nome do produto...">
+                                    <button class="btn btn-icon" id="search-product">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
                                 <div class="search-results" id="search-results"></div>
                             </div>
-                        </div>
-                        
-                        <div class="selected-product" id="selected-product">
-                            <div class="empty-selection">
-                                <i class="fas fa-arrow-up"></i>
-                                <p>Selecione um produto da lista acima</p>
+
+                            <div class="selected-product-card" id="selected-product-card" style="display: none;">
+                                <div class="product-info">
+                                    <div class="product-code">
+                                        <strong>Código:</strong>
+                                        <span id="selected-code">-</span>
+                                    </div>
+                                    <div class="product-name">
+                                        <strong>Produto:</strong>
+                                        <span id="selected-name">-</span>
+                                    </div>
+                                    <div class="product-tara">
+                                        <strong>Tara:</strong>
+                                        <span id="selected-tara">0.000</span> kg
+                                    </div>
+                                    <div class="product-price">
+                                        <strong>Valor/kg:</strong>
+                                        R$ <span id="selected-price">0.00</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        
-                        <div class="weighing-inputs">
-                            <div class="input-group">
-                                <label for="tara">
-                                    <i class="fas fa-box-open"></i> Tara (kg)
-                                </label>
-                                <input type="number" id="tara" step="0.001" min="0" placeholder="0.000" value="">
-                                <small>Peso da embalagem vazia</small>
+
+                        <div class="form-section">
+                            <h3>Informações da Pesagem</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="employee-select">
+                                        <i class="fas fa-user"></i>
+                                        Colaborador
+                                    </label>
+                                    <select id="employee-select">
+                                        <option value="">Selecione um colaborador</option>
+                                    </select>
+                                </div>
                             </div>
-                            
-                            <div class="input-group">
-                                <label for="bruto">
-                                    <i class="fas fa-weight-hanging"></i> Peso Bruto (kg)
-                                </label>
-                                <input type="number" id="bruto" step="0.001" min="0" placeholder="0.000" value="">
-                                <small>Peso total (produto + embalagem)</small>
+
+                            <div class="weighing-panel">
+                                <div class="weighing-item">
+                                    <label>Tara (kg)</label>
+                                    <div class="weighing-value" id="tara-display">0.000</div>
+                                </div>
+                                <div class="weighing-item">
+                                    <label>Peso Bruto (kg)</label>
+                                    <input type="number" id="gross-weight" step="0.001" min="0" placeholder="0.000">
+                                </div>
+                                <div class="weighing-item">
+                                    <label>Peso Líquido (kg)</label>
+                                    <div class="weighing-value" id="net-weight">0.000</div>
+                                </div>
                             </div>
-                            
-                            <div class="input-group result-group">
-                                <label for="liquido">
-                                    <i class="fas fa-calculator"></i> Peso Líquido (kg)
-                                </label>
-                                <div class="result-display" id="liquido">0.000 kg</div>
-                                <small>Peso do produto (bruto - tara)</small>
+
+                            <div class="weighing-panel">
+                                <div class="weighing-item">
+                                    <label>Valor por Kg (R$)</label>
+                                    <div class="weighing-value" id="price-per-kg">0.00</div>
+                                </div>
+                                <div class="weighing-item">
+                                    <label>Valor Total (R$)</label>
+                                    <div class="weighing-value" id="total-value">0.00</div>
+                                </div>
                             </div>
-                            
-                            <div class="input-group">
-                                <label for="valor-kg">
-                                    <i class="fas fa-tag"></i> Valor por kg (R$)
+
+                            <div class="form-group">
+                                <label for="observations">
+                                    <i class="fas fa-sticky-note"></i>
+                                    Observações (Opcional)
                                 </label>
-                                <input type="number" id="valor-kg" step="0.01" min="0" placeholder="0.00" value="">
+                                <textarea id="observations" rows="3" placeholder="Adicione observações sobre esta pesagem..."></textarea>
                             </div>
-                            
-                            <div class="input-group result-group">
-                                <label for="valor-total">
-                                    <i class="fas fa-money-bill-wave"></i> Valor Total (R$)
-                                </label>
-                                <div class="result-display" id="valor-total">R$ 0,00</div>
-                            </div>
-                        </div>
-                        
-                        <div class="weighing-actions">
-                            <button class="btn-clear" id="clear-form">
-                                <i class="fas fa-broom"></i> Limpar
-                            </button>
-                            <button class="btn-submit" id="submit-weighing">
-                                <i class="fas fa-save"></i> Registrar Pesagem
-                            </button>
-                            <!-- Botões de edição (inicialmente ocultos) -->
-                            <button class="btn-save-edit" id="save-edit" style="display: none;">
-                                <i class="fas fa-check"></i> Salvar Edição
-                            </button>
-                            <button class="btn-cancel-edit" id="cancel-edit" style="display: none;">
-                                <i class="fas fa-times"></i> Cancelar
-                            </button>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Tela de Remanejamento Atualizada -->
-            <section id="remanejamento" class="tab-content">
-                <div class="remanejamento-container">
-                    <div class="remanejamento-header">
-                        <h2><i class="fas fa-recycle"></i> Remanejamento de Produtos</h2>
-                        <div class="remanejamento-subtitle">
-                            <i class="fas fa-info-circle"></i>
-                            <span>Controle de sobras, perdas e transformação de produtos</span>
+            <!-- Página de Sobras/Perdas -->
+            <section class="page" id="waste-page">
+                <div class="page-header">
+                    <h2><i class="fas fa-recycle"></i> Registro de Sobras/Perdas</h2>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="new-waste">
+                            <i class="fas fa-plus"></i>
+                            Novo Registro
+                        </button>
+                    </div>
+                </div>
+                   <!-- Adicionar isto após o campo de busca do produto -->
+                <div class="form-group" id="periodo-select-container" style="display: none;">
+                    <label for="waste-periodo-select">
+                        <i class="fas fa-calendar-alt"></i>
+                        Período de Produção
+                    </label>
+                    <select id="waste-periodo-select">
+                        <option value="">Selecione o período</option>
+                    </select>
+                </div>
+
+                <div class="waste-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Registrar Sobras/Perdas do Período</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="waste-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="waste-product-search">
+                                            <i class="fas fa-search"></i>
+                                            Buscar Produto
+                                        </label>
+                                        <input type="text" id="waste-product-search" placeholder="Digite código ou nome do produto...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="waste-date">
+                                            <i class="fas fa-calendar"></i>
+                                            Período
+                                        </label>
+                                        <input type="date" id="waste-date">
+                                    </div>
+                                </div>
+
+                                <div class="selected-waste-product" id="selected-waste-product" style="display: none;">
+                                    <div class="product-info">
+                                        <div class="product-name">
+                                            <strong>Produto:</strong>
+                                            <span id="waste-product-name">-</span>
+                                        </div>
+                                        <div class="production-total">
+                                            <strong>Produção Total no Período:</strong>
+                                            <span id="period-production-total">0.000</span> kg
+                                        </div>
+                                        <div class="available-waste">
+                                            <strong>Sobras Disponíveis:</strong>
+                                            <span id="available-waste">0.000</span> kg
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="waste-type">
+                                            <i class="fas fa-tag"></i>
+                                            Tipo
+                                        </label>
+                                        <select id="waste-type">
+                                            <option value="">Selecione o tipo</option>
+                                            <option value="sobra">Sobra</option>
+                                            <option value="perda">Perda/Descarte</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="waste-quantity">
+                                            <i class="fas fa-weight-hanging"></i>
+                                            Quantidade (kg)
+                                        </label>
+                                        <input type="number" id="waste-quantity" step="0.001" min="0" placeholder="0.000">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="waste-observations">
+                                        <i class="fas fa-sticky-note"></i>
+                                        Observações
+                                    </label>
+                                    <textarea id="waste-observations" rows="2" placeholder="Descreva as condições das sobras/perdas..."></textarea>
+                                </div>
+
+                                <div class="form-actions">
+                                    <button class="btn btn-secondary" id="cancel-waste">
+                                        Cancelar
+                                    </button>
+                                    <button class="btn btn-primary" id="register-waste">
+                                        Registrar Sobras/Perdas
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="remanejamento-steps">
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Registros de Sobras/Perdas</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Data/Hora</th>
+                                            <th>Tipo</th>
+                                            <th>Produto</th>
+                                            <th>Total (kg)</th>
+                                            <th>Valor (R$)</th>
+                                            <th>Produção Total (kg)</th>
+                                            <th>Saldo (kg)</th>
+                                            <th>Saldo R$</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="waste-records">
+                                        <tr class="no-data-row">
+                                            <td colspan="9">Nenhum registro de sobras/perdas encontrado</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Página de Remanejamento -->
+            <section class="page" id="reassignment-page">
+                <div class="page-header">
+                    <h2><i class="fas fa-exchange-alt"></i> Remanejamento de Produtos</h2>
+                    <div class="page-subtitle">
+                        <p>Controle de sobras, perdas e transformação de produtos</p>
+                    </div>
+                </div>
+
+                <div class="reassignment-container">
+                    <!-- Etapas do Remanejamento -->
+                    <div class="reassignment-steps">
                         <div class="step active" data-step="1">
                             <div class="step-number">1</div>
-                            <div class="step-content">
-                                <h3>Origem do Produto</h3>
+                            <div class="step-info">
+                                <h4>Origem do Produto</h4>
                                 <p>Selecione o produto de origem</p>
                             </div>
                         </div>
                         <div class="step" data-step="2">
                             <div class="step-number">2</div>
-                            <div class="step-content">
-                                <h3>Tipo de Remanejamento</h3>
+                            <div class="step-info">
+                                <h4>Tipo de Remanejamento</h4>
                                 <p>Defina destino ou perda</p>
                             </div>
                         </div>
                         <div class="step" data-step="3">
                             <div class="step-number">3</div>
-                            <div class="step-content">
-                                <h3>Detalhes e Cálculos</h3>
+                            <div class="step-info">
+                                <h4>Detalhes e Cálculos</h4>
                                 <p>Informe pesos e valores</p>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="remanejamento-form">
-                        <!-- Passo 1: Origem -->
-                        <div class="form-step active" id="step-1">
-                            <div class="form-group">
-                                <label for="remanejamento-search">
-                                    <i class="fas fa-search"></i> Buscar Produto de Origem
-                                </label>
-                                <div class="search-container">
-                                    <input type="text" id="remanejamento-search" placeholder="Digite o código ou nome do produto...">
-                                    <div class="search-results" id="remanejamento-results"></div>
+
+                    <!-- Conteúdo das Etapas -->
+                    <div class="reassignment-content">
+                        <!-- Etapa 1: Origem -->
+                        <div class="step-content active" data-step="1">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>Buscar Produto de Origem</h3>
                                 </div>
-                            </div>
-                            
-                            <div class="selected-product" id="remanejamento-selected">
-                                <div class="empty-selection">
-                                    <i class="fas fa-box"></i>
-                                    <p>Selecione um produto para remanejamento</p>
-                                </div>
-                            </div>
-                            
-                            <div class="step-actions">
-                                <button class="btn-next-step" data-next="2">
-                                    <i class="fas fa-arrow-right"></i> Próximo
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <!-- Passo 2: Tipo -->
-                        <div class="form-step" id="step-2">
-                            <div class="tipo-options">
-                                <h3><i class="fas fa-filter"></i> Tipo de Remanejamento</h3>
-                                
-                                <div class="option-group">
-                                    <div class="option-card active" data-tipo="sobra" data-destino="farinha">
-                                        <div class="option-icon">
-                                            <i class="fas fa-wheat-awn"></i>
-                                        </div>
-                                        <div class="option-content">
-                                            <h4>Sobra para Farinha de Rosca</h4>
-                                            <p>Transformar sobras em farinha de rosca</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="option-card" data-tipo="sobra" data-destino="torrada">
-                                        <div class="option-icon">
-                                            <i class="fas fa-bread-slice"></i>
-                                        </div>
-                                        <div class="option-content">
-                                            <h4>Sobra para Torrada</h4>
-                                            <p>Transformar sobras em torrada</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="option-card" data-tipo="perda">
-                                        <div class="option-icon">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </div>
-                                        <div class="option-content">
-                                            <h4>Perda/Descarte</h4>
-                                            <p>Registrar perda ou descarte de produto</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="step-actions">
-                                <button class="btn-prev-step" data-prev="1">
-                                    <i class="fas fa-arrow-left"></i> Voltar
-                                </button>
-                                <button class="btn-next-step" data-next="3">
-                                    <i class="fas fa-arrow-right"></i> Próximo
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <!-- Passo 3: Detalhes -->
-                        <div class="form-step" id="step-3">
-                            <div class="remanejamento-details">
-                                <div class="detail-info">
-                                    <h3><i class="fas fa-info-circle"></i> Informações do Remanejamento</h3>
-                                    <div class="info-grid" id="remanejamento-info">
-                                        <div class="info-item">
-                                            <span class="info-label">Produto Origem:</span>
-                                            <span class="info-value" id="info-origem">-</span>
-                                        </div>
-                                        <div class="info-item">
-                                            <span class="info-label">Tipo:</span>
-                                            <span class="info-value" id="info-tipo">-</span>
-                                        </div>
-                                        <div class="info-item">
-                                            <span class="info-label">Destino:</span>
-                                            <span class="info-value" id="info-destino">-</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="pesagem-inputs">
-                                    <div class="input-row">
-                                        <div class="input-group">
-                                            <label for="peso-inicial">
-                                                <i class="fas fa-weight"></i> Peso Inicial (kg)
-                                            </label>
-                                            <input type="number" id="peso-inicial" step="0.001" min="0" placeholder="0.000" value="10.000">
-                                            <small>Peso do produto antes do processamento</small>
-                                        </div>
-                                        
-                                        <div class="input-group">
-                                            <label for="peso-final">
-                                                <i class="fas fa-weight-hanging"></i> Peso Final (kg)
-                                            </label>
-                                            <input type="number" id="peso-final" step="0.001" min="0" placeholder="0.000" value="8.500">
-                                            <small>Peso após transformação/final</small>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="input-row">
-                                        <div class="input-group">
-                                            <label for="valor-origem">
-                                                <i class="fas fa-tag"></i> Valor/kg Origem (R$)
-                                            </label>
-                                            <input type="number" id="valor-origem" step="0.01" min="0" placeholder="0.00" value="25.50">
-                                        </div>
-                                        
-                                        <div class="input-group">
-                                            <label for="valor-destino">
-                                                <i class="fas fa-tag"></i> Valor/kg Destino (R$)
-                                            </label>
-                                            <input type="number" id="valor-destino" step="0.01" min="0" placeholder="0.00" value="15.00">
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="calculation-results">
-                                        <div class="result-card">
-                                            <div class="result-icon">
-                                                <i class="fas fa-minus-circle"></i>
-                                            </div>
-                                            <div class="result-content">
-                                                <h4>Diferença de Peso</h4>
-                                                <p class="result-value" id="diff-peso">0.000 kg</p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="result-card">
-                                            <div class="result-icon">
-                                                <i class="fas fa-calculator"></i>
-                                            </div>
-                                            <div class="result-content">
-                                                <h4>Valor Inicial</h4>
-                                                <p class="result-value" id="valor-inicial">R$ 0,00</p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="result-card">
-                                            <div class="result-icon">
-                                                <i class="fas fa-calculator"></i>
-                                            </div>
-                                            <div class="result-content">
-                                                <h4>Valor Final</h4>
-                                                <p class="result-value" id="valor-final">R$ 0,00</p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="result-card loss-card">
-                                            <div class="result-icon">
-                                                <i class="fas fa-exclamation-triangle"></i>
-                                            </div>
-                                            <div class="result-content">
-                                                <h4>Prejuízo</h4>
-                                                <p class="result-value" id="prejuizo">R$ 0,00</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="observacoes">
-                                        <label for="observacoes">
-                                            <i class="fas fa-sticky-note"></i> Observações
+                                <div class="card-content">
+                                    <div class="form-group">
+                                        <label for="reassignment-product-search">
+                                            <i class="fas fa-search"></i>
+                                            Código ou nome do produto
                                         </label>
-                                        <textarea id="observacoes" placeholder="Observações sobre o remanejamento..." rows="3"></textarea>
+                                        <input type="text" id="reassignment-product-search" placeholder="Digite código ou nome do produto...">
+                                    </div>
+
+                                    <div class="search-results-container" id="reassignment-results"></div>
+
+                                    <div class="selected-origin-product" id="selected-origin-product" style="display: none;">
+                                        <h4>Produto Selecionado</h4>
+                                        <div class="product-details">
+                                            <div class="detail-item">
+                                                <strong>Código:</strong>
+                                                <span id="origin-code">-</span>
+                                            </div>
+                                            <div class="detail-item">
+                                                <strong>Produto:</strong>
+                                                <span id="origin-name">-</span>
+                                            </div>
+                                            <div class="detail-item">
+                                                <strong>Sobras Disponíveis:</strong>
+                                                <span id="origin-available">0.000</span> kg
+                                            </div>
+                                            <div class="detail-item">
+                                                <strong>Valor/kg:</strong>
+                                                R$ <span id="origin-price">0.00</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            
-                            <div class="step-actions">
-                                <button class="btn-prev-step" data-prev="2">
-                                    <i class="fas fa-arrow-left"></i> Voltar
-                                </button>
-                                <button class="btn-submit-remanejamento" id="submit-remanejamento">
-                                    <i class="fas fa-save"></i> Registrar Remanejamento
-                                </button>
+                        </div>
+
+                        <!-- Etapa 2: Tipo -->
+                        <div class="step-content" data-step="2">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>Tipo de Remanejamento</h3>
+                                </div>
+                                <div class="card-content">
+                                    <div class="reassignment-types">
+                                        <div class="type-option active" data-type="farinha">
+                                            <div class="type-icon">
+                                                <i class="fas fa-bread-slice"></i>
+                                            </div>
+                                            <div class="type-info">
+                                                <h4>Sobra para Farinha de Rosca</h4>
+                                                <p>Transformar sobras em farinha de rosca</p>
+                                            </div>
+                                            <div class="type-check">
+                                                <i class="fas fa-check-circle"></i>
+                                            </div>
+                                        </div>
+
+                                        <div class="type-option" data-type="torrada">
+                                            <div class="type-icon">
+                                                <i class="fas fa-toast"></i>
+                                            </div>
+                                            <div class="type-info">
+                                                <h4>Sobra para Torrada</h4>
+                                                <p>Transformar sobras em torrada</p>
+                                            </div>
+                                            <div class="type-check">
+                                                <i class="fas fa-check-circle"></i>
+                                            </div>
+                                        </div>
+
+                                        <div class="type-option" data-type="perda">
+                                            <div class="type-icon">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </div>
+                                            <div class="type-info">
+                                                <h4>Perda/Descarte</h4>
+                                                <p>Registrar perda ou descarte de produto</p>
+                                            </div>
+                                            <div class="type-check">
+                                                <i class="fas fa-check-circle"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="reassignment-info" id="reassignment-info" style="display: none;">
+                                        <h4>Informações do Remanejamento</h4>
+                                        <div class="info-grid">
+                                            <div class="info-item">
+                                                <strong>Produto Origem:</strong>
+                                                <span id="info-origin">-</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <strong>Tipo:</strong>
+                                                <span id="info-type">-</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <strong>Destino:</strong>
+                                                <span id="info-destination">-</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Etapa 3: Detalhes -->
+                        <div class="step-content" data-step="3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>Detalhes do Remanejamento</h3>
+                                </div>
+                                <div class="card-content">
+                                    <div class="reassignment-details">
+                                        <div class="detail-panel">
+                                            <div class="detail-group">
+                                                <label>Peso Inicial (kg)</label>
+                                                <input type="number" id="initial-weight" step="0.001" min="0" placeholder="0.000">
+                                            </div>
+                                            <div class="detail-group">
+                                                <label>Peso Final (kg)</label>
+                                                <input type="number" id="final-weight" step="0.001" min="0" placeholder="0.000">
+                                            </div>
+                                        </div>
+
+                                        <div class="detail-panel">
+                                            <div class="detail-group">
+                                                <label>Valor/kg Origem (R$)</label>
+                                                <div class="value-display" id="origin-price-display">0.00</div>
+                                            </div>
+                                            <div class="detail-group">
+                                                <label>Valor/kg Destino (R$)</label>
+                                                <input type="number" id="destination-price" step="0.01" min="0" placeholder="0.00">
+                                            </div>
+                                        </div>
+
+                                        <div class="calculation-cards">
+                                            <div class="calc-card">
+                                                <div class="calc-header">
+                                                    <h5>Diferença de Peso</h5>
+                                                    <i class="fas fa-balance-scale"></i>
+                                                </div>
+                                                <div class="calc-value" id="weight-difference">0.000 kg</div>
+                                            </div>
+
+                                            <div class="calc-card">
+                                                <div class="calc-header">
+                                                    <h5>Valor Inicial</h5>
+                                                    <i class="fas fa-money-bill-wave"></i>
+                                                </div>
+                                                <div class="calc-value" id="initial-value">R$ 0,00</div>
+                                            </div>
+
+                                            <div class="calc-card">
+                                                <div class="calc-header">
+                                                    <h5>Valor Final</h5>
+                                                    <i class="fas fa-money-bill-wave"></i>
+                                                </div>
+                                                <div class="calc-value" id="final-value">R$ 0,00</div>
+                                            </div>
+
+                                            <div class="calc-card negative">
+                                                <div class="calc-header">
+                                                    <h5>Prejuízo</h5>
+                                                    <i class="fas fa-exclamation-triangle"></i>
+                                                </div>
+                                                <div class="calc-value" id="loss-value">R$ 0,00</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="reassignment-observations">
+                                                <i class="fas fa-sticky-note"></i>
+                                                Observações
+                                            </label>
+                                            <textarea id="reassignment-observations" rows="3" placeholder="Adicione observações sobre este remanejamento..."></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Navegação entre Etapas -->
+                    <div class="step-navigation">
+                        <button class="btn btn-secondary" id="prev-step">
+                            <i class="fas fa-arrow-left"></i>
+                            Voltar
+                        </button>
+                        <div class="step-indicators">
+                            <span>Etapa <span id="current-step">1</span> de 3</span>
+                        </div>
+                        <button class="btn btn-primary" id="next-step">
+                            Próximo
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                        <button class="btn btn-success" id="register-reassignment" style="display: none;">
+                            <i class="fas fa-check-circle"></i>
+                            Registrar Remanejamento
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Página de Registros -->
+            <section class="page" id="records-page">
+                <div class="page-header">
+                    <h2><i class="fas fa-clipboard-list"></i> Registros de Produção</h2>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary" id="clear-filters">
+                            <i class="fas fa-eraser"></i>
+                            Limpar
+                        </button>
+                        <button class="btn btn-primary" id="apply-filters">
+                            <i class="fas fa-filter"></i>
+                            Aplicar Filtros
+                        </button>
+                    </div>
+                </div>
+
+                <div class="records-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Filtros de Busca</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="filters-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="record-type">
+                                            <i class="fas fa-tag"></i>
+                                            Tipo
+                                        </label>
+                                        <select id="record-type">
+                                            <option value="">Todos os tipos</option>
+                                            <option value="production">Produção normal</option>
+                                            <option value="reassignment">Remanejamento</option>
+                                            <option value="sobra">Sobra</option>
+                                            <option value="perda">Perda</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="record-product">
+                                            <i class="fas fa-box"></i>
+                                            Produto
+                                        </label>
+                                        <input type="text" id="record-product" placeholder="Filtrar por nome...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="start-date">
+                                            <i class="fas fa-calendar"></i>
+                                            Data Início
+                                        </label>
+                                        <input type="date" id="start-date">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="end-date">
+                                            <i class="fas fa-calendar"></i>
+                                            Data Fim
+                                        </label>
+                                        <input type="date" id="end-date">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Registros</h3>
+                            <div class="records-summary">
+                                <span>Mostrando <span id="records-count">0</span> registros</span>
+                            </div>
+                        </div>
+                        <div class="card-content">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Data/Hora</th>
+                                            <th>Tipo</th>
+                                            <th>Produto</th>
+                                            <th>Detalhes</th>
+                                            <th>Peso (kg)</th>
+                                            <th>Valor (R$)</th>
+                                            <th>Diferença</th>
+                                            <th>Prejuízo</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="records-table">
+                                        <tr class="no-data-row">
+                                            <td colspan="9">Nenhum registro encontrado</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td colspan="4"><strong>Totais:</strong></td>
+                                            <td id="total-weight">0 kg</td>
+                                            <td id="total-value-sum">R$ 0,00</td>
+                                            <td id="total-difference">0 kg</td>
+                                            <td id="total-loss">R$ 0,00</td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Registros de Pesagem Atualizados -->
-            <section id="records" class="tab-content">
-                <div class="records-header">
-                    <h2><i class="fas fa-history"></i> Registros de Produção</h2>
-                    <div class="records-filters">
-                        <div class="filter-group">
-                            <label for="filter-type">
-                                <i class="fas fa-filter"></i> Tipo:
-                            </label>
-                            <select id="filter-type">
-                                <option value="all">Todos</option>
-                                <option value="normal">Produção Normal</option>
-                                <option value="remanejamento">Remanejamento</option>
-                                <option value="sobra">Sobra</option>
-                                <option value="perda">Perda</option>
-                            </select>
-                        </div>
-                        
-                        <div class="filter-group">
-                            <label for="filter-date">
-                                <i class="far fa-calendar"></i> Data:
-                            </label>
-                            <input type="date" id="filter-date">
-                        </div>
-                        
-                        <div class="filter-actions">
-                            <button class="btn-filter" id="filter-apply">
-                                <i class="fas fa-search"></i> Aplicar
-                            </button>
-                            <button class="btn-filter" id="filter-reset">
-                                <i class="fas fa-redo"></i> Limpar
-                            </button>
-                            <button class="btn-delete" id="clear-records">
-                                <i class="fas fa-trash-alt"></i> Limpar Todos
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="records-table-container">
-                    <table class="records-table">
-                        <thead>
-                            <tr>
-                                <th>Data/Hora</th>
-                                <th>Tipo</th>
-                                <th>Produto</th>
-                                <th>Detalhes</th>
-                                <th>Peso (kg)</th>
-                                <th>Valor (R$)</th>
-                                <th>Diferença</th>
-                                <th>Prejuízo</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="records-body">
-                            <tr>
-                                <td colspan="9" class="empty-table">
-                                    <i class="fas fa-clipboard-list"></i>
-                                    Nenhum registro encontrado
-                                </td>
-                            </tr>
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="4" class="total-label">Totais:</td>
-                                <td id="total-peso">0 kg</td>
-                                <td id="total-valor">R$ 0,00</td>
-                                <td id="total-diff">0 kg</td>
-                                <td id="total-prejuizo">R$ 0,00</td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </section>
-
-            <!-- Relatórios Atualizados com Filtros Avançados -->
-            <section id="reports" class="tab-content">
-                <div class="reports-header">
+            <!-- Página de Relatórios -->
+            <section class="page" id="reports-page">
+                <div class="page-header">
                     <h2><i class="fas fa-chart-bar"></i> Relatórios de Produção</h2>
-                    <div class="reports-filters-container">
-                        <div class="filter-advanced">
-                            <div class="filter-advanced-group">
-                                <label for="advanced-start">
-                                    <i class="far fa-calendar-alt"></i> Data Início
-                                </label>
-                                <input type="date" id="advanced-start">
-                            </div>
-                            
-                            <div class="filter-advanced-group">
-                                <label for="advanced-end">
-                                    <i class="far fa-calendar-alt"></i> Data Fim
-                                </label>
-                                <input type="date" id="advanced-end">
-                            </div>
-                            
-                            <div class="filter-advanced-group">
-                                <label for="filter-product-name">
-                                    <i class="fas fa-box"></i> Nome do Produto
-                                </label>
-                                <input type="text" id="filter-product-name" placeholder="Filtrar por nome...">
-                            </div>
-                            
-                            <div class="filter-advanced-group">
-                                <label for="filter-product-code">
-                                    <i class="fas fa-hashtag"></i> Código do Produto
-                                </label>
-                                <input type="text" id="filter-product-code" placeholder="Filtrar por código...">
-                            </div>
-                            
-                            <div class="filter-advanced-group">
-                                <label for="filter-tipo-detalhado">
-                                    <i class="fas fa-filter"></i> Tipo
-                                </label>
-                                <select id="filter-tipo-detalhado">
-                                    <option value="all">Todos os Tipos</option>
-                                    <option value="normal">Produção Normal</option>
-                                    <option value="sobra">Sobras</option>
-                                    <option value="perda">Perdas</option>
-                                </select>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary" id="clear-report-filters">
+                            <i class="fas fa-eraser"></i>
+                            Limpar Filtros
+                        </button>
+                        <button class="btn btn-primary" id="apply-report-filters">
+                            <i class="fas fa-filter"></i>
+                            Aplicar Filtros
+                        </button>
+                        <button class="btn btn-success" id="export-pdf">
+                            <i class="fas fa-file-pdf"></i>
+                            Exportar PDF
+                        </button>
+                        <button class="btn btn-success" id="export-excel">
+                            <i class="fas fa-file-excel"></i>
+                            Exportar Excel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="reports-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Filtros do Relatório</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="report-filters">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="report-start-date">
+                                            <i class="fas fa-calendar"></i>
+                                            Data Início
+                                        </label>
+                                        <input type="date" id="report-start-date">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="report-end-date">
+                                            <i class="fas fa-calendar"></i>
+                                            Data Fim
+                                        </label>
+                                        <input type="date" id="report-end-date">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="report-product-name">
+                                            <i class="fas fa-box"></i>
+                                            Nome do Produto
+                                        </label>
+                                        <input type="text" id="report-product-name" placeholder="Filtrar por nome...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="report-product-code">
+                                            <i class="fas fa-barcode"></i>
+                                            Código do Produto
+                                        </label>
+                                        <input type="text" id="report-product-code" placeholder="Filtrar por código...">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="report-type">
+                                            <i class="fas fa-tag"></i>
+                                            Tipo
+                                        </label>
+                                        <select id="report-type">
+                                            <option value="">Todos os tipos</option>
+                                            <option value="production">Produção</option>
+                                            <option value="waste">Sobras/Perdas</option>
+                                            <option value="reassignment">Remanejamento</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        
-                        <!-- Na seção de relatórios, atualize a ordem dos botões -->
-                            <div class="report-controls">
-                                <button class="btn-generate" id="generate-report">
-                                    <i class="fas fa-chart-bar"></i> Gerar Relatório
-                                </button>
-                                <button class="btn-filter" id="apply-advanced-filters">
-                                    <i class="fas fa-filter"></i> Aplicar Filtros
-                                </button>
-                                <button class="btn-filter" id="reset-advanced-filters">
-                                    <i class="fas fa-redo"></i> Limpar Filtros
-                                </button>
-                                <button class="btn-pdf" id="generate-pdf">
-                                    <i class="fas fa-file-pdf"></i> Exportar PDF
+                    </div>
+
+                    <div class="cards-grid">
+                        <div class="card stat-card">
+                            <div class="card-header">
+                                <h3>Filtro Ativo</h3>
+                                <i class="fas fa-filter"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="active-filter">Todos os registros</div>
+                            </div>
+                        </div>
+
+                        <div class="card stat-card">
+                            <div class="card-header">
+                                <h3>Total Produzido</h3>
+                                <i class="fas fa-box-open"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="report-production-total">0.000 kg</div>
+                            </div>
+                        </div>
+
+                        <div class="card stat-card">
+                            <div class="card-header">
+                                <h3>Valor Total</h3>
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="report-value-total">R$ 0,00</div>
+                            </div>
+                        </div>
+
+                        <div class="card stat-card negative">
+                            <div class="card-header">
+                                <h3>Total Perdas</h3>
+                                <i class="fas fa-trash-alt"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="stat-value" id="report-loss-total">0.000 kg</div>
+                                <div class="stat-subvalue" id="report-loss-value">R$ 0,00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-charts">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Distribuição por Tipo</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-placeholder" id="type-distribution-chart">
+                                    <div class="no-data">
+                                        <i class="fas fa-chart-pie"></i>
+                                        <p>Sem dados para exibir</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Evolução Diária</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-placeholder" id="daily-evolution-chart">
+                                    <div class="no-data">
+                                        <i class="fas fa-chart-line"></i>
+                                        <p>Sem dados para exibir</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Relatório Detalhado por Produto</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Produto</th>
+                                            <th>Código</th>
+                                            <th>Tipo</th>
+                                            <th>Produção (kg)</th>
+                                            <th>Sobras (kg)</th>
+                                            <th>Perdas (kg)</th>
+                                            <th>Valor Total (R$)</th>
+                                            <th>Prejuízo (R$)</th>
+                                            <th>Eficiência</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="report-details">
+                                        <tr class="no-data-row">
+                                            <td colspan="9">Nenhum dado para exibir no período selecionado</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Página de Configurações -->
+            <section class="page" id="configuration-page">
+                <div class="page-header">
+                    <h2><i class="fas fa-cogs"></i> Base de Produtos e Configurações</h2>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="new-product">
+                            <i class="fas fa-plus"></i>
+                            Novo Produto
+                        </button>
+                        <button class="btn btn-secondary" id="new-employee">
+                            <i class="fas fa-user-plus"></i>
+                            Novo Colaborador
+                        </button>
+                    </div>
+                </div>
+
+                <div class="configuration-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Produtos Cadastrados</h3>
+                            <div class="search-container">
+                                <input type="text" id="config-product-search" placeholder="Buscar por código ou nome...">
+                                <button class="btn btn-icon" id="config-search-btn">
+                                    <i class="fas fa-search"></i>
                                 </button>
                             </div>
+                        </div>
+                        <div class="card-content">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Produto</th>
+                                            <th>Código</th>
+                                            <th>Tara (kg)</th>
+                                            <th>Valor/kg (R$)</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="products-table">
+                                        <!-- Produtos serão carregados aqui -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="reports-summary">
-                    <div class="summary-card">
-                        <h3><i class="fas fa-filter"></i> Filtro Ativo</h3>
-                        <p id="filter-active">Todos os registros</p>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Colaboradores</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Cargo</th>
+                                            <th>Código</th>
+                                            <th>Status</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="employees-table">
+                                        <!-- Colaboradores serão carregados aqui -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                    <div class="summary-card">
-                        <h3><i class="fas fa-weight-hanging"></i> Total Produzido</h3>
-                        <p class="summary-value" id="report-total-kg">0 kg</p>
-                    </div>
-                    <div class="summary-card">
-                        <h3><i class="fas fa-money-bill-wave"></i> Valor Total</h3>
-                        <p class="summary-value" id="report-total-value">R$ 0,00</p>
-                    </div>
-                    <div class="summary-card loss-summary">
-                        <h3><i class="fas fa-exclamation-triangle"></i> Total Perdas</h3>
-                        <p class="summary-value" id="report-total-loss">0 kg</p>
-                        <p class="summary-subvalue" id="report-loss-value">R$ 0,00</p>
-                    </div>
-                </div>
-                
-                <div class="reports-charts">
-                    <div class="chart-container">
-                        <h3><i class="fas fa-chart-pie"></i> Distribuição por Tipo</h3>
-                        <canvas id="typeDistributionChart"></canvas>
-                    </div>
-                    
-                    <div class="chart-container">
-                        <h3><i class="fas fa-chart-line"></i> Evolução Diária</h3>
-                        <canvas id="dailyEvolutionChart"></canvas>
-                    </div>
-                </div>
-                
-                <div class="detailed-report">
-                    <h3><i class="fas fa-list-alt"></i> Relatório Detalhado por Produto</h3>
-                    <div class="detailed-table-container">
-                        <table class="detailed-table" id="detailed-report">
-                            <thead>
-                                <tr>
-                                    <th>Produto</th>
-                                    <th>Código</th>
-                                    <th>Tipo</th>
-                                    <th>Produção (kg)</th>
-                                    <th>Sobras (kg)</th>
-                                    <th>Perdas (kg)</th>
-                                    <th>Valor Total (R$)</th>
-                                    <th>Prejuízo (R$)</th>
-                                    <th>Eficiência</th>
-                                </tr>
-                            </thead>
-                            <tbody id="detailed-body">
-                                <tr>
-                                    <td colspan="9" class="empty-table">
-                                        <i class="fas fa-chart-bar"></i>
-                                        Aplique os filtros para gerar o relatório
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                    <div class="configuration-actions">
+                        <div class="action-card">
+                            <div class="action-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="action-info">
+                                <h4>Backup de Dados</h4>
+                                <p>Faça backup completo do sistema</p>
+                            </div>
+                            <button class="btn btn-secondary" id="backup-data">
+                                <i class="fas fa-download"></i>
+                                Backup
+                            </button>
+                        </div>
+
+                        <div class="action-card">
+                            <div class="action-icon">
+                                <i class="fas fa-file-import"></i>
+                            </div>
+                            <div class="action-info">
+                                <h4>Importação/Exportação</h4>
+                                <p>Importe ou exporte dados em CSV/JSON</p>
+                            </div>
+                            <div class="action-buttons">
+                                <button class="btn btn-small btn-secondary" id="import-data">
+                                    <i class="fas fa-file-import"></i>
+                                    Importar
+                                </button>
+                                <button class="btn btn-small btn-secondary" id="export-data">
+                                    <i class="fas fa-file-export"></i>
+                                    Exportar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="action-card danger">
+                            <div class="action-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="action-info">
+                                <h4>Limpar Dados</h4>
+                                <p>Remova todos os registros do sistema</p>
+                            </div>
+                            <button class="btn btn-danger" id="clear-data" data-confirm="true">
+                                <i class="fas fa-trash-alt"></i>
+                                Apagar Dados
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
         </main>
     </div>
 
-    <!-- Modal de Confirmação Moderno -->
-    <div id="confirmation-modal" class="modal">
+    <!-- Modal para Cadastro de Produto -->
+    <div class="modal" id="product-modal">
         <div class="modal-content">
-            <h3><i class="fas fa-question-circle"></i> Confirmação</h3>
-            <p id="modal-message">Tem certeza que deseja prosseguir?</p>
-            <div class="modal-actions">
-                <button class="btn-cancel" id="modal-cancel">Cancelar</button>
-                <button class="btn-confirm" id="modal-confirm">Confirmar</button>
+            <div class="modal-header">
+                <h3><i class="fas fa-box"></i> Cadastrar Novo Produto</h3>
+                <button class="modal-close" id="close-product-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="product-form">
+                    <div class="form-group">
+                        <label for="modal-product-name">Nome do Produto *</label>
+                        <input type="text" id="modal-product-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-product-code">Código *</label>
+                        <input type="text" id="modal-product-code" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="modal-product-tara">Tara (kg) *</label>
+                            <input type="number" id="modal-product-tara" step="0.001" min="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="modal-product-price">Valor/kg (R$) *</label>
+                            <input type="number" id="modal-product-price" step="0.01" min="0" required>
+                        </div>
+                    </div>
+                    <input type="hidden" id="modal-product-id">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-product">Cancelar</button>
+                <button class="btn btn-primary" id="save-product">Salvar Produto</button>
             </div>
         </div>
     </div>
 
-    <!-- Notificação Moderna -->
-    <div id="notification" class="notification">
-        <div class="notification-content">
-            <i class="fas fa-check-circle" id="notification-icon"></i>
-            <span id="notification-message"></span>
+    <!-- Modal para Cadastro de Colaborador -->
+    <div class="modal" id="employee-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-plus"></i> Cadastrar Colaborador</h3>
+                <button class="modal-close" id="close-employee-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="employee-form">
+                    <div class="form-group">
+                        <label for="modal-employee-name">Nome Completo *</label>
+                        <input type="text" id="modal-employee-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-employee-position">Cargo *</label>
+                        <input type="text" id="modal-employee-position" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-employee-code">Código *</label>
+                        <input type="text" id="modal-employee-code" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-employee-status">Status</label>
+                        <select id="modal-employee-status">
+                            <option value="ativo">Ativo</option>
+                            <option value="inativo">Inativo</option>
+                        </select>
+                    </div>
+                    <input type="hidden" id="modal-employee-id">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-employee">Cancelar</button>
+                <button class="btn btn-primary" id="save-employee">Salvar Colaborador</button>
+            </div>
         </div>
     </div>
 
+    <!-- Modal de Confirmação -->
+    <div class="modal" id="confirm-modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h3><i class="fas fa-question-circle"></i> Confirmação</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">Tem certeza que deseja realizar esta ação?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="confirm-cancel">Cancelar</button>
+                <button class="btn btn-danger" id="confirm-ok">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Menu Mobile Inferior -->
+<nav class="mobile-bottom-nav" id="mobileBottomNav">
+    <a href="#" class="mobile-nav-item active" data-page="dashboard">
+        <i class="fas fa-tachometer-alt"></i>
+        <span>Painel</span>
+    </a>
+    <a href="#" class="mobile-nav-item" data-page="weighing">
+        <i class="fas fa-weight"></i>
+        <span>Pesagem</span>
+    </a>
+    <a href="#" class="mobile-nav-item" data-page="waste">
+        <i class="fas fa-recycle"></i>
+        <span>Sobras</span>
+    </a>
+    <a href="#" class="mobile-nav-item" data-page="reassignment">
+        <i class="fas fa-exchange-alt"></i>
+        <span>Movimentação</span>
+    </a>
+    <a href="#" class="mobile-nav-item" data-page="configuration">
+        <i class="fas fa-cogs"></i>
+        <span>Mais</span>
+    </a>
+</nav>
+
+<!-- Toast Mobile -->
+<div class="mobile-toast" id="mobileToast" style="display: none;"></div>
+
+    <!-- Notificações -->
+    <div class="notifications" id="notifications"></div>
+
     <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/pt-br.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="base_produtos.js"></script>
     <script src="app.js"></script>
 </body>
