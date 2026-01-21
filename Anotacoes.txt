@@ -127,3 +127,63 @@ e modo paisagem. organizados legiveis, atento para nao vazar e quebrar conteudo
 adicione cores representativas para cada situação de alerta
 Não faça do relatório um painel dashboard com cards gigante e nem graficos
 foque apenas no upgrade da EXPORTAÇÃO
+--------------------------------------------------------------------------------
+
+
+RELATÓRIO DE PRODUÇÃO - POR PRODUTO
+Período: 20/01/2026 até 20/01/2026
+Gerado em: 20/01/2026 20:01
+
+RESULTADO GERAL DO PERÍODO
+Total Produção: 117.752 kg
+Total Sobras: 10.000 kg
+Total Perdas: 13.000 kg
+Prejuízo Total: R$ 264.85
+Eficiência Média: 77.8%
+Valor Total: R$ 1704.95
+Produtos Analisados: 2
+
+                    RELATÓRIO DE PRODUÇÃO - POR PRODUTO
+Período: 04/01/2026 até 04/01/2026                              Gerado em: 04/01/2026 20:27
+RESULTADO GERAL DO PERÍODO
+_________________________________________________________________________________________
+Produção Total:         Sobras Total:       Prejuízo Total:         Produtos analizados:
+Valor Total:            Perdas Total:       Eficiência:
+_________________________________________________________________________________________
+
+PÃO FRANCÊS (Código: 4251)
+Resumo do Produto
+_________________________________________________________________________________________
+Produção Normal: kg         Valor Total:                   
+Sovras Transformadas: kg    Prejuízo em sobras: (R$)      Eficiência: %
+Perdas/Descartes: kg        Prejuizo Perdas: (R$)           
+_________________________________________________________________________________________
+DETALHAMENTO DA PRODUÇÃO NORMAL: (Ainda faz parte de pão francês 4251)
+tabela com:
+Data    Peso Liq.   Valor kg R$     Valor Total kg    
+
+_________________________________________________________________________________________
+TRANSFORMAÇÕES DE SOBRAS:(Ainda faz parte de pão francês 4251)
+tabela com:
+Data - Peso Inicial (kg) - Destino - Peso Final (kg) - Prejuízo (R$)
+_________________________________________________________________________________________
+
+ANÁLISE COMPARATIVA ENTRE PRODUTOS
+Produto Produção (kg) Valor (R$) Sobras (kg) Perdas (kg) Prejuízo (R$) Eficiência
+PÃO FRANCÊS 29.295 R$ 402,39 9.000 0.000 R$ 49,41 76.5%
+PÃO DOCE 4.125 R$ 70,08 2.000 0.000 R$ 18,60 67.3%
+PÃO BOLACHÃO 2.148 R$ 36,49 0.000 0.000 R$ 0,00 100.0%
+PÃO RECIFE 2.115 R$ 35,93 0.000 0.000 R$ 0,00 100.0%
+
+CONCLUSÃO:
+O período analisado compreende 4 produtos diferentes, com produção total de 37.683 kg e valor total de R$ 544,90. Foram transformadas 11.000 kg em sobras e
+registradas 0.000 kg em perdas/descartes. O prejuízo total foi de R$ 68,01. A eficiência média de produção foi de 86.0%.
+
+
+Erro ao gerar PDF: Error: Invalid arguments passed to jsPDF.text
+    at M.y.__private__.text.y.text (jspdf.js:3503:13)
+    at app.js:3496:25
+    at Array.forEach (<anonymous>)
+    at app.js:3490:32
+    at Array.forEach (<anonymous>)
+    at HTMLButtonElement.exportToPDF (app.js:3392:44)

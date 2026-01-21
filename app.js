@@ -2707,8 +2707,6 @@ function updateReportDetails() {
     });
 }
 
-// Função exportToPDF (VERSÃO CORRIGIDA)
-// Função exportToPDF (VERSÃO SIMPLIFICADA E ORGANIZADA)
 function exportToPDF() {
     try {
         // Coletar dados
@@ -2716,9 +2714,9 @@ function exportToPDF() {
         const endDate = document.getElementById('report-end-date').value || new Date().toISOString().split('T')[0];
         
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('landscape');
+        const doc = new jsPDF('portrait');
         
-        // Configurações básicas
+        // Configurações
         const margin = 15;
         const pageWidth = doc.internal.pageSize.width;
         const contentWidth = pageWidth - (2 * margin);
@@ -2733,453 +2731,437 @@ function exportToPDF() {
         };
         
         const safeNumber = (value) => parseFloat(value) || 0;
+
+        // Função para desenhar label e value com cor para value
+        const drawLabelValue = (doc, label, value, x, y, valueColor = [0, 0, 0]) => {
+            doc.setTextColor(0, 0, 0);
+            doc.text(label, x, y);
+            doc.setTextColor(...valueColor);
+            doc.text(value, x + doc.getTextWidth(label), y);
+        };
         
-        // Página 1: Cabeçalho
-        doc.setFontSize(20);
-        doc.setTextColor(40, 40, 40);
-        doc.text('RELATÓRIO DE PRODUÇÃO', pageWidth / 2, 25, { align: 'center' });
+        // ========== CABEÇALHO ==========
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 255); // Azul para o cabeçalho superior
+        doc.text('CONTROLE DE PRODUÇÃO E QUALIDADE', pageWidth / 2, 10, { align: 'center' });
         
-        doc.setFontSize(14);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`Período: ${formatDate(startDate)} a ${formatDate(endDate)}`, pageWidth / 2, 35, { align: 'center' });
+        // Título Principal
+        doc.setFontSize(18);
+        doc.setTextColor(0, 0, 0);
+        doc.text('RELATÓRIO DE PRODUÇÃO - POR PRODUTO', pageWidth / 2, 25, { align: 'center' });
         
+        // Período
+        doc.setFontSize(11);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Período: ${formatDate(startDate)} até ${formatDate(endDate)}`, pageWidth / 2, 35, { align: 'center' });
+        
+        // Data de geração
         const now = new Date();
         const dataGeracao = now.toLocaleDateString('pt-BR');
         const horaGeracao = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         doc.setFontSize(10);
-        doc.text(`Gerado em: ${dataGeracao} às ${horaGeracao}`, pageWidth / 2, 42, { align: 'center' });
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Gerado em: ${dataGeracao} ${horaGeracao}`, pageWidth / 2, 42, { align: 'center' });
         
-        // Adicionar linha divisória
-        doc.setDrawColor(200, 200, 200);
-        doc.line(margin, 50, pageWidth - margin, 50);
+        // Linha divisória
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.3);
+        doc.line(margin, 48, pageWidth - margin, 48);
         
-        // RESUMO GERAL EM UMA TABELA SIMPLES
-        doc.autoTable({
-            startY: 55,
-            margin: { left: margin, right: margin },
-            head: [['RESUMO GERAL DO PERÍODO', '']],
-            body: [
-                ['Período Analisado:', `${formatDate(startDate)} a ${formatDate(endDate)}`],
-                ['Data de Geração:', `${dataGeracao} ${horaGeracao}`],
-                ['Total de Produtos Analisados:', productionRecords.length.toString()]
-            ],
-            theme: 'plain',
-            styles: {
-                fontSize: 11,
-                cellPadding: 6,
-                overflow: 'linebreak',
-                halign: 'left'
-            },
-            headStyles: {
-                fillColor: [52, 152, 219], // Azul
-                textColor: 255,
-                fontStyle: 'bold'
-            },
-            columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 100 },
-                1: { cellWidth: 'auto' }
+        // Subtítulo RESULTADO GERAL DO PERÍODO
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('RESULTADO GERAL DO PERÍODO', margin, 58);
+        
+        // Agrupar dados para resumo
+        const producaoFiltrada = productionRecords.filter(p => p.date >= startDate && p.date <= endDate);
+        const wasteFiltrado = wasteRecords.filter(w => w.date >= startDate && w.date <= endDate);
+        const reassignmentFiltrado = reassignmentRecords.filter(r => r.date >= startDate && r.date <= endDate);
+        
+        // Cálculos gerais
+        const totalProducaoKg = producaoFiltrada.reduce((sum, p) => sum + safeNumber(p.netWeight), 0);
+        const totalProducaoValor = producaoFiltrada.reduce((sum, p) => sum + safeNumber(p.totalValue), 0);
+        const totalSobrasKg = reassignmentFiltrado.reduce((sum, r) => sum + safeNumber(r.initialWeight), 0);
+        const totalPerdasKg = wasteFiltrado.filter(w => w.type === 'perda').reduce((sum, w) => sum + safeNumber(w.quantity), 0);
+        const prejuizoSobras = reassignmentFiltrado.reduce((sum, r) => sum + safeNumber(r.lossValue), 0);
+        const prejuizoPerdas = wasteFiltrado
+            .filter(w => w.type === 'perda')
+            .reduce((sum, w) => {
+                const product = productBase.getProductByCode(w.productCode);
+                const price = product ? product.pricePerKg : 0;
+                return sum + (safeNumber(w.quantity) * safeNumber(price));
+            }, 0);
+        
+        // Agrupar por produto para eficiência média
+        const productionByProduct = {};
+        producaoFiltrada.forEach(record => {
+            if (!productionByProduct[record.productCode]) {
+                productionByProduct[record.productCode] = {
+                    name: record.productName,
+                    code: record.productCode,
+                    production: 0,
+                    waste: 0,
+                    loss: 0
+                };
+            }
+            productionByProduct[record.productCode].production += safeNumber(record.netWeight);
+        });
+        
+        // Adicionar sobras e perdas
+        reassignmentFiltrado.forEach(r => {
+            if (productionByProduct[r.originProductCode]) {
+                productionByProduct[r.originProductCode].waste += safeNumber(r.initialWeight);
             }
         });
         
-        // PÁGINA 2+: PRODUTOS
-        let startY = doc.lastAutoTable.finalY + 15;
+        wasteFiltrado.filter(w => w.type === 'perda').forEach(w => {
+            if (productionByProduct[w.productCode]) {
+                productionByProduct[w.productCode].loss += safeNumber(w.quantity);
+            }
+        });
         
-        // Agrupar produção por produto
-        const productionByProduct = {};
-        productionRecords
-            .filter(p => p.date >= startDate && p.date <= endDate)
-            .forEach(record => {
-                if (!productionByProduct[record.productCode]) {
-                    productionByProduct[record.productCode] = {
-                        name: record.productName,
-                        code: record.productCode,
-                        production: 0,
-                        value: 0,
-                        pricePerKg: record.pricePerKg || 0,
-                        records: []
-                    };
-                }
-                productionByProduct[record.productCode].production += safeNumber(record.netWeight);
-                productionByProduct[record.productCode].value += safeNumber(record.totalValue);
-                productionByProduct[record.productCode].records.push(record);
-            });
+        // Calcular eficiência média
+        let totalEficiencia = 0;
+        let produtosComProducao = 0;
+        
+        Object.values(productionByProduct).forEach(produto => {
+            if (produto.production > 0) {
+                const producaoUtil = produto.production - produto.waste - produto.loss;
+                const eficiencia = (producaoUtil / produto.production) * 100;
+                totalEficiencia += eficiencia;
+                produtosComProducao++;
+            }
+        });
+        
+        const eficienciaMedia = produtosComProducao > 0 ? (totalEficiencia / produtosComProducao) : 100;
+        
+        // Tabela de Resultado Geral - Layout horizontal com fundo claro
+        const startYGeral = 68;
+        doc.setFontSize(10);
+        
+        // Fundo claro (light blue)
+        doc.setFillColor(240, 248, 255);
+        doc.rect(margin, startYGeral - 5, contentWidth, 25, 'F');
+        
+        const y1 = startYGeral + 5;
+        const y2 = y1 + 10;
+        
+        // Primeira linha
+        drawLabelValue(doc, 'Total Produção: ', `${totalProducaoKg.toFixed(3)} kg`, margin + 5, y1);
+        drawLabelValue(doc, 'Total Sobras: ', `${totalSobrasKg.toFixed(3)} kg`, margin + 70, y1);
+        drawLabelValue(doc, 'Prejuízo Total: ', `R$ ${(prejuizoSobras + prejuizoPerdas).toFixed(2)}`, margin + 130, y1, [255, 0, 0]);
+        drawLabelValue(doc, 'Eficiência Média: ', `${eficienciaMedia.toFixed(1)}%`, margin + 70, y2, [0, 128, 0]);
+        
+        // Segunda linha
+        drawLabelValue(doc, 'Valor Total: ', `R$ ${totalProducaoValor.toFixed(2)}`, margin + 5, y2);
+        drawLabelValue(doc, 'Total Perdas: ', `${totalPerdasKg.toFixed(3)} kg`, margin + 130, y2);
+        drawLabelValue(doc, 'Produtos Analisados: ', `${Object.keys(productionByProduct).length}`, margin + 5, y1 + 20);
+        
+        // ========== PRODUTOS INDIVIDUAIS ==========
+        
+        let startYProduto = startYGeral + 40;
         
         // Processar cada produto
-        Object.values(productionByProduct).forEach((produto, index) => {
-            // Se não couber na página atual, cria nova página
-            if (startY > 250) {
-                doc.addPage('landscape');
-                startY = 20;
+        Object.values(productionByProduct).forEach((produto, indexProduto) => {
+            // Verificar se precisa de nova página
+            if (startYProduto > 220 && indexProduto > 0) {
+                doc.addPage('portrait');
+                startYProduto = 20;
             }
             
-            // TÍTULO DO PRODUTO
-            doc.setFontSize(16);
-            doc.setTextColor(60, 60, 60);
-            doc.text(`${produto.name} (Código: ${produto.code})`, margin, startY);
+            // Título do Produto (azul)
+            doc.setFontSize(14);
+            doc.setTextColor(0, 0, 255);
+            doc.text(`${produto.name.toUpperCase()} (Código: ${produto.code})`, margin, startYProduto);
             
-            startY += 10;
+            startYProduto += 10;
             
-            // LINHA DIVISÓRIA
-            doc.setDrawColor(220, 220, 220);
-            doc.line(margin, startY, pageWidth - margin, startY);
+            // Subtítulo RESUMO DO PRODUTO:
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            doc.text('RESUMO DO PRODUTO:', margin, startYProduto);
             
-            startY += 10;
+            startYProduto += 10;
             
-            // TABELA DE RESUMO DO PRODUTO
-            const transformacoes = reassignmentRecords.filter(r => 
-                r.originProductCode === produto.code && 
-                r.date >= startDate && r.date <= endDate
-            );
+            // Buscar dados específicos do produto
+            const producaoProduto = producaoFiltrada.filter(p => p.productCode === produto.code);
+            const transformacoes = reassignmentFiltrado.filter(r => r.originProductCode === produto.code);
+            const perdasProduto = wasteFiltrado.filter(w => w.productCode === produto.code && w.type === 'perda');
             
-            const sobras = wasteRecords.filter(w => 
-                w.productCode === produto.code && 
-                w.type === 'sobra' && 
-                w.date >= startDate && w.date <= endDate
-            );
+            // Cálculos específicos
+            const totalProducaoProduto = producaoProduto.reduce((sum, p) => sum + safeNumber(p.netWeight), 0);
+            const totalValorProduto = producaoProduto.reduce((sum, p) => sum + safeNumber(p.totalValue), 0);
+            const totalSobrasProduto = transformacoes.reduce((sum, t) => sum + safeNumber(t.initialWeight), 0);
+            const totalPerdasProduto = perdasProduto.reduce((sum, p) => sum + safeNumber(p.quantity), 0);
+            const prejuizoSobrasProduto = transformacoes.reduce((sum, t) => sum + safeNumber(t.lossValue), 0);
+            const prejuizoPerdasProduto = perdasProduto.reduce((sum, p) => {
+                const product = productBase.getProductByCode(produto.code);
+                const price = product ? product.pricePerKg : 0;
+                return sum + (safeNumber(p.quantity) * safeNumber(p.pricePerKg || price));
+            }, 0);
             
-            const perdas = wasteRecords.filter(w => 
-                w.productCode === produto.code && 
-                w.type === 'perda' && 
-                w.date >= startDate && w.date <= endDate
-            );
+            const producaoUtilProduto = totalProducaoProduto - totalSobrasProduto - totalPerdasProduto;
+            const eficienciaProduto = totalProducaoProduto > 0 ? ((producaoUtilProduto / totalProducaoProduto) * 100).toFixed(1) : '100.0';
             
-            // Calcular valores
-            const totalSobras = sobras.reduce((sum, s) => sum + safeNumber(s.quantity), 0);
-            const totalPerdas = perdas.reduce((sum, p) => sum + safeNumber(p.quantity), 0);
-            const prejuizoSobras = transformacoes.reduce((sum, t) => sum + safeNumber(t.lossValue), 0);
-            const prejuizoPerdas = perdas.reduce((sum, p) => sum + (safeNumber(p.quantity) * safeNumber(p.pricePerKg || produto.pricePerKg)), 0);
+            // Fundo claro para resumo (light gray)
+            doc.setFillColor(245, 245, 245);
+            doc.rect(margin, startYProduto - 5, contentWidth, 35, 'F');
             
-            const producaoUtil = produto.production - totalSobras - totalPerdas;
-            const eficiencia = produto.production > 0 ? ((producaoUtil / produto.production) * 100).toFixed(1) : '100.0';
+            const yProd1 = startYProduto + 5;
+            const yProd2 = yProd1 + 10;
+            const yProd3 = yProd2 + 10;
             
-            // Tabela de Resumo
-            doc.autoTable({
-                startY: startY,
-                margin: { left: margin, right: margin },
-                head: [['DESCRIÇÃO', 'VALOR']],
-                body: [
-                    ['Produção Normal:', `${produto.production.toFixed(3)} kg`],
-                    ['Valor Total:', `R$ ${produto.value.toFixed(2)}`],
-                    ['Eficiência:', `${eficiencia}%`],
-                    ['Valor por Kg:', `R$ ${produto.pricePerKg.toFixed(2)}`]
-                ],
-                theme: 'grid',
-                styles: {
-                    fontSize: 10,
-                    cellPadding: 5,
-                    overflow: 'linebreak'
-                },
-                headStyles: {
-                    fillColor: [52, 73, 94], // Azul escuro
-                    textColor: 255,
-                    fontStyle: 'bold',
-                    halign: 'center'
-                },
-                columnStyles: {
-                    0: { fontStyle: 'bold', cellWidth: 100 },
-                    1: { cellWidth: 'auto', halign: 'right' }
-                }
-            });
+            // Resumo do Produto - Layout horizontal
+            doc.setFontSize(10);
+            drawLabelValue(doc, 'Produção Normal: ', `${totalProducaoProduto.toFixed(3)} kg`, margin + 5, yProd1);
+            drawLabelValue(doc, 'Valor Total: ', `R$ ${totalValorProduto.toFixed(2)}`, margin + 80, yProd1);
             
-            startY = doc.lastAutoTable.finalY + 10;
+            drawLabelValue(doc, 'Sobras Transformadas: ', `${totalSobrasProduto.toFixed(3)} kg`, margin + 5, yProd2);
+            drawLabelValue(doc, 'Prejuízo Sobras: ', `R$ ${prejuizoSobrasProduto.toFixed(2)}`, margin + 80, yProd2, [255, 0, 0]);
+            drawLabelValue(doc, 'Eficiência: ', `${eficienciaProduto}%`, margin + 150, yProd2, [0, 128, 0]);
             
-            // SE HOUVER SOBRAS TRANSFORMADAS
+            drawLabelValue(doc, 'Perdas/Descartes: ', `${totalPerdasProduto.toFixed(3)} kg`, margin + 5, yProd3);
+            drawLabelValue(doc, 'Prejuízo Perdas: ', `R$ ${prejuizoPerdasProduto.toFixed(2)}`, margin + 80, yProd3, [255, 0, 0]);
+            
+            startYProduto += 40;
+            
+            // ========== DETALHAMENTO DA PRODUÇÃO NORMAL ==========
+            
+            if (producaoProduto.length > 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(0, 0, 0);
+                doc.text('DETALHAMENTO DA PRODUÇÃO NORMAL:', margin, startYProduto);
+                
+                startYProduto += 10;
+                
+                // Cabeçalho da tabela (verde)
+                doc.setFillColor(0, 128, 0);
+                doc.rect(margin, startYProduto, contentWidth, 10, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(10);
+                doc.text('Data', margin + 5, startYProduto + 7);
+                doc.text('Peso Liq. (kg)', margin + 60, startYProduto + 7);
+                doc.text('Valor/kg (R$)', margin + 120, startYProduto + 7);
+                doc.text('Valor Total (R$)', pageWidth - margin - 5, startYProduto + 7, { align: 'right' });
+                
+                startYProduto += 10;
+                
+                // Linha abaixo do cabeçalho
+                doc.setDrawColor(200, 200, 200);
+                doc.setLineWidth(0.1);
+                doc.line(margin, startYProduto, pageWidth - margin, startYProduto);
+                
+                // Dados da produção
+                doc.setTextColor(0, 0, 0);
+                producaoProduto.slice(0, 6).forEach((registro, idx) => {
+                    const yRow = startYProduto + (idx * 10) + 7;
+                    const dataFormatada = formatDate(registro.date);
+                    const horaFormatada = registro.time.split(':').slice(0, 2).join(':');
+                    
+                    doc.text(`${dataFormatada} ${horaFormatada}`, margin + 5, yRow);
+                    doc.text(`${safeNumber(registro.netWeight).toFixed(3)}`, margin + 65, yRow);
+                    doc.text(`R$ ${safeNumber(registro.pricePerKg).toFixed(2)}`, margin + 125, yRow);
+                    doc.text(`R$ ${safeNumber(registro.totalValue).toFixed(2)}`, pageWidth - margin - 5, yRow, { align: 'right' });
+                });
+                
+                const numRows = Math.min(producaoProduto.length, 6);
+                const tableProducaoHeight = numRows * 10;
+                
+                // Linha final da tabela
+                doc.line(margin, startYProduto + tableProducaoHeight, pageWidth - margin, startYProduto + tableProducaoHeight);
+                
+                startYProduto += tableProducaoHeight + 10;
+            }
+            
+            // ========== TRANSFORMAÇÕES DE SOBRAS ==========
+            
             if (transformacoes.length > 0) {
                 doc.setFontSize(12);
-                doc.setTextColor(243, 156, 18); // Laranja
-                doc.text('SOBRAS TRANSFORMADAS:', margin, startY);
-                startY += 8;
+                doc.setTextColor(0, 0, 0);
+                doc.text('TRANSFORMAÇÕES DE SOBRAS:', margin, startYProduto);
                 
-                // Calcular totais das transformações
-                const totalPesoInicial = transformacoes.reduce((sum, t) => sum + safeNumber(t.initialWeight), 0);
-                const totalPesoFinal = transformacoes.reduce((sum, t) => sum + safeNumber(t.finalWeight), 0);
-                const totalValorParcial = totalPesoInicial * produto.pricePerKg;
-                const totalValorTransformado = transformacoes.reduce((sum, t) => sum + (safeNumber(t.finalWeight) * safeNumber(t.destinationPricePerKg)), 0);
+                startYProduto += 10;
                 
-                // Tabela de Sobras
-                doc.autoTable({
-                    startY: startY,
-                    margin: { left: margin, right: margin },
-                    body: [
-                        ['Peso Inicial Sobras:', `${totalPesoInicial.toFixed(3)} kg`],
-                        ['Valor Parcial Sobras:', `R$ ${totalValorParcial.toFixed(2)}`],
-                        ['Peso Final Transformado:', `${totalPesoFinal.toFixed(3)} kg`],
-                        ['Valor Total Transformado:', `R$ ${totalValorTransformado.toFixed(2)}`],
-                        ['Tipo de Transformação:', transformacoes[0].destinationName],
-                        ['Prejuízo com Sobras:', `R$ ${prejuizoSobras.toFixed(2)}`]
-                    ],
-                    theme: 'plain',
-                    styles: {
-                        fontSize: 10,
-                        cellPadding: 4,
-                        overflow: 'linebreak'
-                    },
-                    columnStyles: {
-                        0: { fontStyle: 'bold', cellWidth: 120, fillColor: [255, 243, 205] },
-                        1: { cellWidth: 'auto', halign: 'right' }
-                    }
-                });
+                // Cabeçalho da tabela (azul)
+                doc.setFillColor(0, 102, 204);
+                doc.rect(margin, startYProduto, contentWidth, 10, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(10);
+                doc.text('Data', margin + 5, startYProduto + 7);
+                doc.text('Peso Inicial (kg)', margin + 60, startYProduto + 7);
+                doc.text('Destino', margin + 110, startYProduto + 7);
+                doc.text('Peso Final (kg)', margin + 150, startYProduto + 7);
+                doc.text('Prejuízo (R$)', pageWidth - margin - 5, startYProduto + 7, { align: 'right' });
                 
-                startY = doc.lastAutoTable.finalY + 10;
+                startYProduto += 10;
                 
-                // Tabela detalhada das transformações
-                if (transformacoes.length > 0) {
-                    doc.autoTable({
-                        startY: startY,
-                        margin: { left: margin, right: margin },
-                        head: [['Data', 'Peso Inicial (kg)', 'Peso Final (kg)', 'Tipo', 'Prejuízo (R$)']],
-                        body: transformacoes.map(t => [
-                            formatDate(t.date),
-                            t.initialWeight.toFixed(3),
-                            t.finalWeight.toFixed(3),
-                            t.destinationName,
-                            t.lossValue.toFixed(2)
-                        ]),
-                        theme: 'grid',
-                        styles: {
-                            fontSize: 9,
-                            cellPadding: 4
-                        },
-                        headStyles: {
-                            fillColor: [243, 156, 18], // Laranja
-                            textColor: 255,
-                            fontStyle: 'bold'
-                        },
-                        columnStyles: {
-                            0: { cellWidth: 40 },
-                            1: { cellWidth: 35, halign: 'right' },
-                            2: { cellWidth: 35, halign: 'right' },
-                            3: { cellWidth: 50 },
-                            4: { cellWidth: 35, halign: 'right', textColor: [231, 76, 60] } // Vermelho para prejuízo
-                        }
-                    });
+                // Linha abaixo do cabeçalho
+                doc.setDrawColor(200, 200, 200);
+                doc.setLineWidth(0.1);
+                doc.line(margin, startYProduto, pageWidth - margin, startYProduto);
+                
+                // Dados das transformações
+                doc.setTextColor(0, 0, 0);
+                transformacoes.forEach((transformacao, idx) => {
+                    const yRow = startYProduto + (idx * 10) + 7;
+                    const dataFormatada = formatDate(transformacao.date);
+                    const horaFormatada = transformacao.time ? transformacao.time.split(':').slice(0, 2).join(':') : '';
                     
-                    startY = doc.lastAutoTable.finalY + 15;
-                }
-            }
-            
-            // SE HOUVER PERDAS
-            if (perdas.length > 0) {
-                doc.setFontSize(12);
-                doc.setTextColor(231, 76, 60); // Vermelho
-                doc.text('PERDAS/DESCARTES:', margin, startY);
-                startY += 8;
-                
-                // Tabela de Perdas
-                doc.autoTable({
-                    startY: startY,
-                    margin: { left: margin, right: margin },
-                    body: [
-                        ['Total Perdido:', `${totalPerdas.toFixed(3)} kg`],
-                        ['Prejuízo Perdas:', `R$ ${prejuizoPerdas.toFixed(2)}`],
-                        ['Motivos:', perdas.map(p => p.motivo || 'Não informado').filter((v, i, a) => a.indexOf(v) === i).join(', ')]
-                    ],
-                    theme: 'plain',
-                    styles: {
-                        fontSize: 10,
-                        cellPadding: 4
-                    },
-                    columnStyles: {
-                        0: { fontStyle: 'bold', cellWidth: 100, fillColor: [255, 235, 238] },
-                        1: { cellWidth: 'auto', halign: 'right', textColor: [231, 76, 60] },
-                        2: { cellWidth: 'auto', halign: 'left' }
-                    }
+                    doc.text(`${dataFormatada} ${horaFormatada}`, margin + 5, yRow);
+                    doc.text(`${safeNumber(transformacao.initialWeight).toFixed(3)}`, margin + 65, yRow);
+                    doc.text(transformacao.destinationName, margin + 115, yRow);
+                    doc.text(`${safeNumber(transformacao.finalWeight).toFixed(3)}`, margin + 155, yRow);
+                    doc.text(`R$ ${safeNumber(transformacao.lossValue).toFixed(2)}`, pageWidth - margin - 5, yRow, { align: 'right' });
                 });
                 
-                startY = doc.lastAutoTable.finalY + 10;
+                const tableTransformacaoHeight = transformacoes.length * 10;
                 
-                // Tabela detalhada das perdas
-                if (perdas.length > 0) {
-                    doc.autoTable({
-                        startY: startY,
-                        margin: { left: margin, right: margin },
-                        head: [['Data', 'Quantidade (kg)', 'Motivo', 'Prejuízo (R$)']],
-                        body: perdas.map(p => [
-                            formatDate(p.date),
-                            p.quantity.toFixed(3),
-                            p.motivo || 'Não informado',
-                            (safeNumber(p.quantity) * safeNumber(p.pricePerKg || produto.pricePerKg)).toFixed(2)
-                        ]),
-                        theme: 'grid',
-                        styles: {
-                            fontSize: 9,
-                            cellPadding: 4
-                        },
-                        headStyles: {
-                            fillColor: [231, 76, 60], // Vermelho
-                            textColor: 255,
-                            fontStyle: 'bold'
-                        },
-                        columnStyles: {
-                            0: { cellWidth: 40 },
-                            1: { cellWidth: 35, halign: 'right' },
-                            2: { cellWidth: 60 },
-                            3: { cellWidth: 35, halign: 'right', textColor: [231, 76, 60] }
-                        }
-                    });
-                    
-                    startY = doc.lastAutoTable.finalY + 15;
-                }
+                // Linha final da tabela
+                doc.line(margin, startYProduto + tableTransformacaoHeight, pageWidth - margin, startYProduto + tableTransformacaoHeight);
+                
+                startYProduto += tableTransformacaoHeight + 20;
+            } else {
+                startYProduto += 15;
             }
             
-            // DETALHAMENTO DA PRODUÇÃO NORMAL
-            if (produto.records.length > 0) {
-                doc.setFontSize(12);
-                doc.setTextColor(39, 174, 96); // Verde
-                doc.text('DETALHAMENTO DA PRODUÇÃO NORMAL:', margin, startY);
-                startY += 8;
-                
-                // Limitar a 10 registros para não sobrecarregar
-                const registrosLimitados = produto.records.slice(0, 10);
-                
-                doc.autoTable({
-                    startY: startY,
-                    margin: { left: margin, right: margin },
-                    head: [['Data', 'Peso Líquido (kg)', 'Valor/kg (R$)', 'Valor Total (R$)']],
-                    body: registrosLimitados.map(r => [
-                        `${formatDate(r.date)} ${r.time.split(':').slice(0, 2).join(':')}`,
-                        r.netWeight.toFixed(3),
-                        r.pricePerKg.toFixed(2),
-                        r.totalValue.toFixed(2)
-                    ]),
-                    theme: 'grid',
-                    styles: {
-                        fontSize: 9,
-                        cellPadding: 4
-                    },
-                    headStyles: {
-                        fillColor: [39, 174, 96], // Verde
-                        textColor: 255,
-                        fontStyle: 'bold'
-                    },
-                    columnStyles: {
-                        0: { cellWidth: 50 },
-                        1: { cellWidth: 35, halign: 'right' },
-                        2: { cellWidth: 35, halign: 'right' },
-                        3: { cellWidth: 35, halign: 'right' }
-                    }
-                });
-                
-                startY = doc.lastAutoTable.finalY + 15;
-                
-                // Se houver mais registros, mostrar aviso
-                if (produto.records.length > 10) {
-                    doc.setFontSize(9);
-                    doc.setTextColor(100, 100, 100);
-                    doc.text(`* Mostrando 10 de ${produto.records.length} registros.`, margin, startY);
-                    startY += 8;
-                }
-            }
-            
-            // Adicionar linha divisória entre produtos
-            if (index < Object.values(productionByProduct).length - 1) {
-                doc.setDrawColor(220, 220, 220);
-                doc.setLineWidth(0.5);
-                doc.line(margin, startY, pageWidth - margin, startY);
-                startY += 15;
+            // Nova página se necessário
+            if (startYProduto > 250 && indexProduto < Object.values(productionByProduct).length - 1) {
+                doc.addPage('portrait');
+                startYProduto = 20;
             }
         });
         
-        // PÁGINA FINAL: RESUMO COMPARATIVO (se houver mais de um produto)
+        // ========== PÁGINA FINAL: ANÁLISE COMPARATIVA ==========
+        
         if (Object.keys(productionByProduct).length > 1) {
-            doc.addPage('landscape');
+            // Verificar se precisa de nova página
+            if (startYProduto > 150) {
+                doc.addPage('portrait');
+                startYProduto = 20;
+            } else {
+                startYProduto += 10;
+            }
             
+            // Título ANÁLISE COMPARATIVA
             doc.setFontSize(16);
-            doc.setTextColor(60, 60, 60);
-            doc.text('ANÁLISE COMPARATIVA ENTRE PRODUTOS', pageWidth / 2, 25, { align: 'center' });
+            doc.setTextColor(0, 0, 0);
+            doc.text('ANÁLISE COMPARATIVA ENTRE PRODUTOS', pageWidth / 2, startYProduto, { align: 'center' });
             
-            // Preparar dados para tabela comparativa
-            const tabelaComparativa = [];
-            Object.values(productionByProduct).forEach(produto => {
-                const transformacoes = reassignmentRecords.filter(r => r.originProductCode === produto.code);
-                const perdas = wasteRecords.filter(w => w.productCode === produto.code && w.type === 'perda');
-                
-                const totalSobras = transformacoes.reduce((sum, t) => sum + safeNumber(t.initialWeight), 0);
-                const totalPerdas = perdas.reduce((sum, p) => sum + safeNumber(p.quantity), 0);
-                const prejuizoSobras = transformacoes.reduce((sum, t) => sum + safeNumber(t.lossValue), 0);
-                const prejuizoPerdas = perdas.reduce((sum, p) => sum + (safeNumber(p.quantity) * safeNumber(p.pricePerKg || produto.pricePerKg)), 0);
-                
-                const producaoUtil = produto.production - totalSobras - totalPerdas;
-                const eficiencia = produto.production > 0 ? ((producaoUtil / produto.production) * 100).toFixed(1) : '100.0';
-                
-                tabelaComparativa.push([
-                    produto.name,
-                    `${produto.production.toFixed(3)} kg`,
-                    `R$ ${produto.value.toFixed(2)}`,
-                    `${totalSobras.toFixed(3)} kg`,
-                    `${totalPerdas.toFixed(3)} kg`,
-                    `R$ ${(prejuizoSobras + prejuizoPerdas).toFixed(2)}`,
-                    `${eficiencia}%`
-                ]);
-            });
+            startYProduto += 15;
             
-            // Tabela comparativa
-            doc.autoTable({
-                startY: 35,
-                margin: { left: margin, right: margin },
-                head: [['Produto', 'Produção (kg)', 'Valor (R$)', 'Sobras (kg)', 'Perdas (kg)', 'Prejuízo (R$)', 'Eficiência']],
-                body: tabelaComparativa,
-                theme: 'grid',
-                styles: {
-                    fontSize: 9,
-                    cellPadding: 4
-                },
-                headStyles: {
-                    fillColor: [52, 73, 94],
-                    textColor: 255,
-                    fontStyle: 'bold',
-                    halign: 'center'
-                },
-                columnStyles: {
-                    0: { cellWidth: 50 },
-                    1: { cellWidth: 30, halign: 'right' },
-                    2: { cellWidth: 30, halign: 'right' },
-                    3: { cellWidth: 30, halign: 'right' },
-                    4: { cellWidth: 30, halign: 'right' },
-                    5: { cellWidth: 35, halign: 'right', textColor: [231, 76, 60] },
-                    6: { cellWidth: 25, halign: 'right' }
-                }
-            });
-            
-            // CONCLUSÃO FINAL
-            const finalY = doc.lastAutoTable.finalY + 15;
-            doc.setFontSize(12);
-            doc.setTextColor(60, 60, 60);
-            doc.text('CONCLUSÃO DO PERÍODO:', margin, finalY);
-            
+            // Cabeçalho da tabela comparativa (azul)
+            doc.setFillColor(0, 102, 204);
+            doc.rect(margin, startYProduto, contentWidth, 10, 'F');
+            doc.setTextColor(255, 255, 255);
             doc.setFontSize(10);
-            const texto = [
-                `O período analisado compreende ${Object.keys(productionByProduct).length} produtos diferentes.`,
-                `A produção total foi de ${Object.values(productionByProduct).reduce((sum, p) => sum + p.production, 0).toFixed(3)} kg.`,
-                `O valor total produzido foi de R$ ${Object.values(productionByProduct).reduce((sum, p) => sum + p.value, 0).toFixed(2)}.`
+            doc.text('Produto', margin + 5, startYProduto + 7);
+            doc.text('Produção (kg)', margin + 50, startYProduto + 7);
+            doc.text('Valor (R$)', margin + 90, startYProduto + 7);
+            doc.text('Sobras (kg)', margin + 125, startYProduto + 7);
+            doc.text('Perdas (kg)', margin + 160, startYProduto + 7);
+            doc.text('Prejuízo (R$)', margin + 190, startYProduto + 7);
+            doc.text('Eficiência', pageWidth - margin - 5, startYProduto + 7, { align: 'right' });
+            
+            startYProduto += 10;
+            
+            // Linha abaixo do cabeçalho
+            doc.setDrawColor(200, 200, 200);
+            doc.line(margin, startYProduto, pageWidth - margin, startYProduto);
+            
+            // Dados comparativos
+            doc.setTextColor(0, 0, 0);
+            let linhaAtual = 0;
+            Object.values(productionByProduct).forEach(produto => {
+                // Buscar dados específicos para este produto
+                const producaoProduto = producaoFiltrada.filter(p => p.productCode === produto.code);
+                const transformacoes = reassignmentFiltrado.filter(r => r.originProductCode === produto.code);
+                const perdasProduto = wasteFiltrado.filter(w => w.productCode === produto.code && w.type === 'perda');
+                
+                // Cálculos
+                const totalProducaoProduto = producaoProduto.reduce((sum, p) => sum + safeNumber(p.netWeight), 0);
+                const totalValorProduto = producaoProduto.reduce((sum, p) => sum + safeNumber(p.totalValue), 0);
+                const totalSobrasProduto = transformacoes.reduce((sum, t) => sum + safeNumber(t.initialWeight), 0);
+                const totalPerdasProduto = perdasProduto.reduce((sum, p) => sum + safeNumber(p.quantity), 0);
+                const prejuizoSobrasProduto = transformacoes.reduce((sum, t) => sum + safeNumber(t.lossValue), 0);
+                const prejuizoPerdasProduto = perdasProduto.reduce((sum, p) => {
+                    const product = productBase.getProductByCode(produto.code);
+                    const price = product ? product.pricePerKg : 0;
+                    return sum + (safeNumber(p.quantity) * safeNumber(p.pricePerKg || price));
+                }, 0);
+                
+                const producaoUtilProduto = totalProducaoProduto - totalSobrasProduto - totalPerdasProduto;
+                const eficienciaProduto = totalProducaoProduto > 0 ? ((producaoUtilProduto / totalProducaoProduto) * 100).toFixed(1) : '100.0';
+                
+                // Escrever dados
+                const yPos = startYProduto + (linhaAtual * 10) + 7;
+                
+                // Nome do produto (primeira palavra em upper)
+                const nomeCurto = produto.name.toUpperCase();
+                doc.text(nomeCurto, margin + 5, yPos);
+                
+                doc.text(`${totalProducaoProduto.toFixed(3)}`, margin + 55, yPos);
+                doc.text(`R$ ${totalValorProduto.toFixed(2)}`, margin + 95, yPos);
+                doc.text(`${totalSobrasProduto.toFixed(3)}`, margin + 130, yPos);
+                doc.text(`${totalPerdasProduto.toFixed(3)}`, margin + 165, yPos);
+                doc.setTextColor(255, 0, 0);
+                doc.text(`R$ ${(prejuizoSobrasProduto + prejuizoPerdasProduto).toFixed(2)}`, margin + 195, yPos);
+                doc.setTextColor(0, 128, 0);
+                doc.text(`${eficienciaProduto}%`, pageWidth - margin - 5, yPos, { align: 'right' });
+                doc.setTextColor(0, 0, 0);
+                
+                linhaAtual++;
+            });
+            
+            const tableComparativaHeight = linhaAtual * 10;
+            
+            // Linha final da tabela
+            doc.line(margin, startYProduto + tableComparativaHeight, pageWidth - margin, startYProduto + tableComparativaHeight);
+            
+            startYProduto += tableComparativaHeight + 15;
+            
+            // ========== CONCLUSÃO ==========
+            
+            doc.setFontSize(14);
+            doc.setTextColor(0, 0, 0);
+            doc.text('CONCLUSÃO:', margin, startYProduto);
+            
+            startYProduto += 10;
+            
+            // Texto da conclusão
+            doc.setFontSize(10);
+            const textoConclusao = [
+                `O período analisado compreende ${Object.keys(productionByProduct).length} produtos diferentes,`,
+                `com produção total de ${totalProducaoKg.toFixed(3)} kg e valor total de R$ ${totalProducaoValor.toFixed(2)}.`,
+                `Foram transformadas ${totalSobrasKg.toFixed(3)} kg em sobras e registradas ${totalPerdasKg.toFixed(3)} kg`,
+                `em perdas/descartes. O prejuízo total foi de R$ ${(prejuizoSobras + prejuizoPerdas).toFixed(2)}.`,
+                `A eficiência média de produção foi de ${eficienciaMedia.toFixed(1)}%.`
             ];
             
-            let yPosTexto = finalY + 8;
-            texto.forEach(linha => {
-                doc.text(linha, margin + 10, yPosTexto);
-                yPosTexto += 6;
+            textoConclusao.forEach((linha, idx) => {
+                doc.text(linha, margin, startYProduto + (idx * 8));
             });
+            
+            startYProduto += textoConclusao.length * 8;
         }
         
-        // Adicionar rodapé em todas as páginas
+        // ========== RODAPÉ ==========
+        
         const totalPages = doc.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
             doc.setPage(i);
             
-            // Linha do rodapé
-            doc.setDrawColor(200, 200, 200);
-            doc.line(margin, 270, pageWidth - margin, 270);
-            
-            // Texto do rodapé
+            // Rodapé esquerdo
             doc.setFontSize(8);
-            doc.setTextColor(100, 100, 100);
-            doc.text('ProControl - Sistema de Controle de Produção', margin, 277);
-            doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, 277, { align: 'right' });
-            doc.text(`Gerado em: ${dataGeracao} ${horaGeracao}`, pageWidth / 2, 277, { align: 'center' });
+            doc.setTextColor(150, 150, 150);
+            doc.text('Sistema de Controle de Produção • Relatório por Produto', margin, doc.internal.pageSize.height - 10);
+            
+            // Número da página direito
+            doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, doc.internal.pageSize.height - 10, { align: 'right' });
         }
         
-        // Salvar o PDF
-        const fileName = `relatorio_producao_${startDate}_${endDate}.pdf`;
+        // ========== SALVAR PDF ==========
+        
+        const fileName = `relatorio_producao_${startDate.replace(/-/g, '')}_${endDate.replace(/-/g, '')}.pdf`;
         doc.save(fileName);
         
         showNotification('Relatório PDF gerado com sucesso!', 'success');
@@ -3189,6 +3171,9 @@ function exportToPDF() {
         showNotification('Erro ao gerar relatório: ' + error.message, 'error');
     }
 }
+
+
+
 function exportToExcel() {
     showNotification('Exportação para Excel em desenvolvimento', 'info');
 }
