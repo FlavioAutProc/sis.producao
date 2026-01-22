@@ -78,7 +78,7 @@ Peso Inicial (kg)
 Peso Final (kg)
 vao ser digitados pelo usuario, os demais calculos serão automaticos com base cadastrado no sistema
 --------------------------------------------------------------------
-
+Status [x] Resolvida [ ] Não Resolvida
 Analizar:
 Registros de Produção
 Implementar funções de exportações PDF/XLSX/CSV
@@ -180,10 +180,126 @@ O período analisado compreende 4 produtos diferentes, com produção total de 3
 registradas 0.000 kg em perdas/descartes. O prejuízo total foi de R$ 68,01. A eficiência média de produção foi de 86.0%.
 
 
-Erro ao gerar PDF: Error: Invalid arguments passed to jsPDF.text
-    at M.y.__private__.text.y.text (jspdf.js:3503:13)
-    at app.js:3496:25
-    at Array.forEach (<anonymous>)
-    at app.js:3490:32
-    at Array.forEach (<anonymous>)
-    at HTMLButtonElement.exportToPDF (app.js:3392:44)
+=======================================================================================================
+Status [x] Resolvida [ ] Não Resolvida
+implementação 1
+Sobras/Perdas
+Quando se regista a profução
+
+ESTA ACUMULANDO OS TOTAIS PRODUZIDOS. POR EXEMPLO:
+PRODUZI HOJE 100 kg
+no dia seguinte foi feita uma nova produção 50 kg
+
+ao registar sobras deve haver separação dos periodos com os respectivo valores
+mas o que havendo é: ele separa o periodo anterior(ok correto)
+mas no novo periodo ele junta com o anterior
+Exe:
+Como é para ser:
+21/01/2026 - 100 kg (1 pesagem) 
+22/01/2026 - 100 kg (1 pesagem)
+Como está: 
+(22/01/2026 - 200 kg 2 pesagem)
+21/01/2026 - 100 kg (1 pesagem) 
+
+juntou a produção de 22/01 + 21/01 cada periodo deve ser independente
+
+faça essa correção para que cada produção por period nao seja cumulativa e sim independente
+=======================================================================================================
+implementação 2
+Implementar Importação de backup Json 
+=======================================================================================================
+22/01/2026
+
+LISTA DE ERROS E SUGESTÕES DE CORREÇÃO
+🔴 ERROS CRÍTICOS (QUEBRAM FUNCIONALIDADE)
+1. FILTROS DE RELATÓRIOS NÃO FUNCIONAIS
+Erro: Função applyReportFilters() apenas mostra notificação sem aplicar filtros
+
+Correção: Implementar lógica real de filtragem usando valores dos campos
+
+2. GRÁFICOS NÃO IMPLEMENTADOS
+Erro: Placeholders vazios com mensagem "Sem dados para exibir"
+
+Correção: Implementar gráficos básicos com Chart.js ou similar
+
+3. FILTRO DE PRODUTO INCOMPLETO (REGISTROS)
+Erro: Não busca por código do produto, apenas por nome
+
+Correção: Incluir productCode e originProductCode na busca
+
+4. COMPARAÇÕES NO DASHBOARD SEMPRE ZERO
+Erro: Cards mostram "Comparativo com ontem: 0%" sempre
+
+Correção: Implementar cálculo real comparando com dados do dia anterior
+
+🟡 ERROS FUNCIONAIS (LIMITAM USABILIDADE)
+5. EXPORTAÇÃO EXCEL NÃO IMPLEMENTADA
+Erro: Botão mostra notificação "em desenvolvimento"
+
+Correção: Implementar exportação usando SheetJS ou similar
+
+6. IMPORTAÇÃO DE DADOS NÃO IMPLEMENTADA
+Erro: Botão mostra notificação "em desenvolvimento"
+
+Correção: Implementar importação de CSV/JSON
+
+7. FALTA VALIDAÇÃO DE DATAS
+Erro: Pode selecionar data início > data fim sem validação
+
+Correção: Adicionar validação antes de aplicar filtros
+
+8. CÁLCULO DE EFICIÊNCIA INCOMPLETO
+Erro: Considera apenas perdas, ignora sobras na eficiência
+
+Correção: Incluir sobras no cálculo: (produção - perdas - sobras) / produção
+
+🟠 ERROS DE USABILIDADE
+9. FEEDBACK VISUAL INSUFICIENTE
+Erro: Campos obrigatórios sem indicação clara
+
+Correção: Adicionar * vermelho e validação em tempo real
+
+10. MOBILE UX MELHORÁVEL
+Erro: Alguns elementos podem não ser otimizados para mobile
+
+Correção: Revisar breakpoints e ajustar layouts específicos
+
+11. FALTA PAGINAÇÃO EM TABELAS
+Erro: Todas as linhas carregadas de uma vez
+
+Correção: Implementar paginação para +50 registros
+
+🟢 SUGESTÕES DE MELHORIA (NÃO SÃO ERROS)
+12. ADICIONAR LOGS/AUDITORIA
+Sugestão: Registrar quem fez cada alteração e quando
+
+13. IMPLEMENTAR PERMISSÕES
+Sugestão: Diferentes níveis de acesso (operador, supervisor, admin)
+
+14. SISTEMA DE BACKUP AUTOMÁTICO
+Sugestão: Backup automático periódico no localStorage
+
+15. RELATÓRIOS PRÉ-DEFINIDOS
+Sugestão: Botões rápidos para "Hoje", "Esta semana", "Este mês"
+
+16. NOTIFICAÇÕES IMPORTANTES
+Sugestão: Alertar sobre períodos sem fechamento ou perdas acima do normal
+
+17. BUSCA AVANÇADA
+Sugestão: Filtros combinados com operadores AND/OR
+
+18. HISTÓRICO DE ALTERAÇÕES
+Sugestão: Poder visualizar alterações anteriores em registros
+
+📋 PRIORIDADE DE CORREÇÃO
+CRÍTICA: Filtros de relatórios (item 1)
+
+ALTA: Gráficos e comparações do dashboard (itens 2, 4)
+
+ALTA: Exportação Excel (item 5)
+
+MÉDIA: Filtro de produto completo (item 3)
+
+MÉDIA: Validações de dados (itens 7, 8)
+
+BAIXA: Melhorias de UX (itens 9-18)
