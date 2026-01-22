@@ -209,7 +209,11 @@ implementação 2
 Implementar Importação de backup Json 
 =======================================================================================================
 22/01/2026
+==========================================
+filtros em ralatórios está acumulando os valores de produção e nao exebindo os periodos nos peridodos individuais
 
+
+============================================
 LISTA DE ERROS E SUGESTÕES DE CORREÇÃO
 🔴 ERROS CRÍTICOS (QUEBRAM FUNCIONALIDADE)
 1. FILTROS DE RELATÓRIOS NÃO FUNCIONAIS
