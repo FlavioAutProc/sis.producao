@@ -145,6 +145,21 @@ function showMobileMoreMenu() {
 }
 
 // Esconder menu "Mais"
+function hideMobileMoreMenu() {
+  const menuOverlay = document.querySelector('.mobile-more-overlay');
+  if (menuOverlay) {
+    // Animação de saída
+    menuOverlay.classList.remove('active');
+    setTimeout(() => {
+      if (menuOverlay.parentNode) {
+        menuOverlay.parentNode.removeChild(menuOverlay);
+      }
+    }, 300);
+  }
+}
+
+
+// Esconder menu "Mais"
 function initSwipeGestures() {
   let startX = 0;
   let startY = 0;
@@ -510,9 +525,7 @@ document.addEventListener("DOMContentLoaded", function () {
   loadWasteRecords();
 
   // Detectar orientação
-  detectOrientation();
-  initMobileNavigation(); // ← ADICIONE AQUI
-  detectOrientation(); // ← ADICIONE AQUI
+   detectOrientation(); // ← ADICIONE AQUI
 });
 
 // Detectar mudança de orientação
